@@ -110,4 +110,8 @@ npm run test:ui
 - **[实现总结](docs/implementation/)** - 自动化功能、动态检测、配置说明
 - **[技术分析](docs/analysis/)** - 反检测策略、隐身技术、专家报告
 
-查看 [docs/README.md](docs/README.md) 获取完整文档索引。
+**快速导航：**
+- [文档索引](docs/README.md) - 完整文档列表
+- [快速索引](docs/INDEX.md) - 按主题/角色查找
+- [项目架构](docs/ARCHITECTURE.md) - 系统架构设计
+- [项目结构](PROJECT-STRUCTURE.md) - 目录组织说明
