@@ -433,7 +433,15 @@ export async function humanMouseMove(page: Page): Promise<void> {
  */
 export async function humanType(page: Page, selector: string, text: string): Promise<void> {
   const element = page.locator(selector);
-  await element.click();
+
+  // Try regular click first, then force click if intercepted
+  try {
+    await element.click({ timeout: 5000 });
+  } catch (error) {
+    console.log('[HumanType] Regular click failed, trying force click...');
+    await element.click({ force: true });
+  }
+
   await humanDelay(200, 500);
 
   for (const char of text) {

@@ -98,12 +98,13 @@ class RetryableRegistrationFailure extends Error {
 }
 
 const postRegistrationSkipSelector = [
-  'button:has-text("Skip")',
-  'button:has-text("跳过")',
+  'button:has-text("Skip"):not([data-skip-to-content])',
+  'button:has-text("跳过"):not([data-skip-to-content])',
   'button.btn-ghost:has-text("Skip")',
   'button.btn-ghost:has(div:has-text("Skip"))',
-  'a:has-text("Skip")',
-  'a:has-text("跳过")'
+  // Only match Skip links that are NOT accessibility links
+  'a:has-text("Skip"):not([data-skip-to-content]):not([href="#main"])',
+  'a:has-text("跳过"):not([data-skip-to-content]):not([href="#main"])'
 ].join(", ");
 
 async function detectRegistrationFailure(page: Page): Promise<string | null> {
@@ -191,7 +192,15 @@ async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
       console.log('[Flow] Preference/onboarding page detected, clicking Skip button');
       await humanDelay(500, 1000);
       await humanMouseMove(page);
-      await skipButton.click();
+
+      // Try regular click first, then force click if intercepted
+      try {
+        await skipButton.click({ timeout: 5000 });
+      } catch (error) {
+        console.log('[Flow] Regular click failed, trying force click...');
+        await skipButton.click({ force: true });
+      }
+
       await humanDelay(2000, 3000);
       console.log('[Flow] Skip button clicked, waiting for the next page');
       skippedAny = true;
