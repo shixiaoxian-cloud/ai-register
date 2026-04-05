@@ -1,3 +1,6 @@
+import { readActivePlatformContext } from "./config/platform-sqlite";
+import type { EmailVerificationConfig } from "./types";
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value === "") {
     return fallback;
@@ -19,6 +22,21 @@ function parseNumber(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function resolveEmailCodeRegex(pattern: string | RegExp | undefined): RegExp {
+  if (pattern instanceof RegExp) {
+    return pattern;
+  }
+
+  if (typeof pattern === "string" && pattern.trim()) {
+    return new RegExp(pattern);
+  }
+
+  return /\b(\d{6})\b/;
+}
+
+const activePlatformContext = readActivePlatformContext();
+const activeMailConfig = activePlatformContext.mailConfig;
+
 export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -30,22 +48,31 @@ export function requireEnv(name: string): string {
 
 export function hasImapConfig(): boolean {
   return Boolean(
-    process.env.IMAP_HOST &&
-      process.env.IMAP_USER &&
-      process.env.IMAP_PASS
+    activeMailConfig?.enabled &&
+      activeMailConfig.mode === "imap" &&
+      activeMailConfig.imapHost &&
+      activeMailConfig.imapUser &&
+      activeMailConfig.imapPass
   );
 }
 
-export function getEmailCodeRegex(): RegExp {
-  return new RegExp(process.env.EMAIL_CODE_REGEX ?? "\\b(\\d{6})\\b");
+export function getEmailCodeRegex(
+  emailVerification?: EmailVerificationConfig
+): RegExp {
+  return resolveEmailCodeRegex(
+    emailVerification?.codePattern ??
+      activePlatformContext.profile.emailVerification?.codePattern
+  );
 }
 
 export const runtimeConfig = {
-  headed: parseBoolean(process.env.HEADED, true),
-  continueAfterProtectedChallenge: parseBoolean(
-    process.env.CONTINUE_AFTER_PROTECTED_CHALLENGE,
-    false
-  ),
+  headed:
+    parseBoolean(process.env.HEADED, false) ||
+    activePlatformContext.plan.runMode === "headed" ||
+    activePlatformContext.system.defaultRunMode === "headed",
+  continueAfterProtectedChallenge:
+    activePlatformContext.plan.continueAfterProtectedChallenge ||
+    activePlatformContext.system.continueAfterProtectedChallenge,
   manualStepTimeoutMs: parseNumber(
     process.env.MANUAL_STEP_TIMEOUT_MS,
     5 * 60 * 1000
@@ -53,20 +80,46 @@ export const runtimeConfig = {
   emailPollIntervalMs: parseNumber(process.env.EMAIL_POLL_INTERVAL_MS, 5_000),
   emailTimeoutMs: parseNumber(process.env.EMAIL_TIMEOUT_MS, 3 * 60 * 1000),
   stealthMode: parseBoolean(process.env.STEALTH_MODE, true),
-  telemetryMode: (process.env.TELEMETRY_MODE ?? "block") as "block" | "modify" | "log" | "allow",
-  useTempMail: parseBoolean(process.env.USE_TEMP_MAIL, false)
+  telemetryMode: (process.env.TELEMETRY_MODE ?? "block") as
+    | "block"
+    | "modify"
+    | "log"
+    | "allow",
+  useTempMail: Boolean(
+    activeMailConfig?.enabled && activeMailConfig.mode === "temp-mail"
+  )
 };
 
 export const imapConfig = {
-  host: process.env.IMAP_HOST ?? "",
-  port: parseNumber(process.env.IMAP_PORT, 993),
-  secure: parseBoolean(process.env.IMAP_SECURE, true),
-  user: process.env.IMAP_USER ?? "",
-  pass: process.env.IMAP_PASS ?? ""
+  host:
+    activeMailConfig?.enabled && activeMailConfig.mode === "imap"
+      ? activeMailConfig.imapHost
+      : "",
+  port:
+    activeMailConfig?.enabled && activeMailConfig.mode === "imap"
+      ? activeMailConfig.imapPort
+      : 993,
+  secure:
+    activeMailConfig?.enabled && activeMailConfig.mode === "imap"
+      ? activeMailConfig.imapSecure
+      : true,
+  user:
+    activeMailConfig?.enabled && activeMailConfig.mode === "imap"
+      ? activeMailConfig.imapUser
+      : "",
+  pass:
+    activeMailConfig?.enabled && activeMailConfig.mode === "imap"
+      ? activeMailConfig.imapPass
+      : ""
 };
 
 export const tempMailConfig = {
-  baseUrl: process.env.TEMP_MAIL_BASE_URL ?? "http://114.215.173.42:888",
-  apiKey: process.env.TEMP_MAIL_API_KEY ?? "tm_admin_36f53ee440748349007538fde32d1aeeb3ac028c804d7b90"
+  baseUrl:
+    activeMailConfig?.enabled && activeMailConfig.mode === "temp-mail"
+      ? activeMailConfig.baseUrl
+      : "",
+  apiKey:
+    activeMailConfig?.enabled && activeMailConfig.mode === "temp-mail"
+      ? activeMailConfig.apiKey
+      : ""
 };
-

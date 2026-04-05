@@ -13,6 +13,11 @@
 ```
 ai-register/
 ├── docs/                  # 技术文档（统一管理）
+│   ├── 00_MEMORY/         # AI PM 项目记忆（事实快照、会话日志）
+│   ├── 01_STRATEGY/       # 业务决策和范围沉淀
+│   ├── 02_PRD/            # Framework PRD 和 feature PRD
+│   ├── 03_DESIGN/         # 设计稿、原型、交付说明
+│   ├── 04_RESOURCES/      # 竞品、调研、外部参考
 │   ├── README.md          # 文档索引
 │   ├── INDEX.md           # 快速索引
 │   ├── ARCHITECTURE.md    # 架构说明
@@ -78,6 +83,41 @@ ai-register/
 - 注意：用于降低误报，不是绕过保护
 
 ## 协作规范
+
+### AI-PM × OpenSpec 联合工作流（自动调用）
+
+本项目默认采用“双引擎”协作：
+
+- `ai-pm` 负责价值判断、范围澄清、PRD、交互、实体、设计交付和项目记忆。
+- `openspec-explore` 负责技术路线探索、change 级别的不确定性澄清，不直接写业务代码。
+- `openspec-propose` 负责把稳定需求固化成 `proposal.md`、`design.md`、`tasks.md`。
+- `openspec-apply-change` 负责按 change 执行实现并同步任务状态。
+- `openspec-archive-change` 负责在任务完成后归档 change，并结束该轮变更。
+
+自动路由规则：
+
+1. 用户在讨论价值、场景、MVP、取舍、PRD、流程、页面、实体、设计说明时，优先调用 `ai-pm`。
+2. 用户在讨论技术可行性、架构取舍、已有 change 的方案摇摆，且还不应该直接编码时，优先调用 `openspec-explore`。
+3. 当需求已经稳定到可以定义一条变更时，必须先给出 2 套候选方案供用户选择；只有在用户明确选定其中 1 套后，才自动调用 `openspec-propose`，并把 `docs/00_MEMORY/`、`docs/01_STRATEGY/`、`docs/02_PRD/` 的结论映射为变更产物。
+4. 当用户要求“实现 / 开发 / 继续做 / 修复”，且存在明确 change 或可以唯一推断 change 时，自动调用 `openspec-apply-change`。
+5. 当 change 任务全部完成、用户要收尾归档时，自动调用 `openspec-archive-change`；如需复盘，再回到 `ai-pm` 补业务结论与方法沉淀。
+
+文件边界：
+
+- 产品记忆与待办：`docs/00_MEMORY/`、`docs/TODO.md`
+- 业务决策与产品资产：`docs/01_STRATEGY/`、`docs/02_PRD/`、`docs/03_DESIGN/`、`docs/04_RESOURCES/`
+- 变更执行资产：`openspec/changes/`
+- 技术参考与总结：现有 `docs/guides/`、`docs/implementation/`、`docs/analysis/`、`docs/troubleshooting/`
+
+串联原则：
+
+- 先用 `ai-pm` 定义“为什么做、为谁做、做到什么算成”，再用 `openspec` 管理“怎么拆、怎么做、做到哪了”。
+- `openspec` 不替代上游产品判断；`ai-pm` 不替代实现期的任务状态管理。
+- 只要进入方案阶段，默认必须输出 2 套方案供用户比较，说明优点、代价和推荐项。
+- 方案默认使用中文输出；除非用户明确要求英文或其他语言，否则不要切换输出语言。
+- 未经用户明确选择，不进入 `openspec-propose`。
+- 一个请求同时包含产品不确定性和技术不确定性时，默认顺序是：`ai-pm` / `openspec-explore` 产出双方案 → 用户选择 → `openspec-propose` → `openspec-apply-change`。
+- 不要求用户显式输入技能名；只要意图明确，就应自动选用最合适的 skill。
 
 ### 代码修改
 

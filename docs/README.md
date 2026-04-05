@@ -9,6 +9,11 @@
 
 ## 目录结构
 
+- **00_MEMORY/** - AI PM 项目记忆（事实快照、会话日志）
+- **01_STRATEGY/** - 业务决策和范围沉淀
+- **02_PRD/** - Framework PRD 和 feature PRD
+- **03_DESIGN/** - 设计稿、原型和交付说明
+- **04_RESOURCES/** - 调研和外部参考
 - **guides/** - 使用指南和配置说明
 - **troubleshooting/** - 问题诊断和解决方案
 - **implementation/** - 功能实现总结
@@ -44,6 +49,8 @@
 - [测试启动修复](troubleshooting/test-launch-fix.md)
 
 ### 实现总结
+- [ai-pm × OpenSpec 联合工作流](implementation/ai-pm-openspec-joint-workflow.md)
+- [平台控制台基础实现](implementation/platform-console-foundation.md)
 - [自动化功能总结](implementation/automation-summary.md)
 - [验证码自动化](implementation/auto-verification-code.md)
 - [验证码更新](implementation/verification-code-update.md)
@@ -94,6 +101,7 @@
 
 - 使用指南：12 篇
 - 故障排除：11 篇
-- 实现总结：17 篇
+- 实现总结：19 篇
 - 技术分析：8 篇
-- **总计：48 篇技术文档**
+- **总计：50 篇技术文档**
+- 另含产品协作工作区：`00_MEMORY/`、`01_STRATEGY/`、`02_PRD/`、`03_DESIGN/`、`04_RESOURCES/`

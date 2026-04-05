@@ -8,3 +8,10 @@ playwright/.cache/
 *.log
 
 output_tokens/
+dist/
+artifacts/platform/
+config/platform-state.json
+config/platform.sqlite
+config/platform.sqlite-shm
+config/platform.sqlite-wal
+*.tsbuildinfo

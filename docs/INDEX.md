@@ -10,6 +10,8 @@
 ### 🏗️ 架构与设计
 - [项目架构](ARCHITECTURE.md) - 系统架构和模块设计
 - [项目结构](../PROJECT-STRUCTURE.md) - 目录组织说明
+- [ai-pm × OpenSpec 联合工作流](implementation/ai-pm-openspec-joint-workflow.md) - 产品协作与变更执行的顶层串联方案
+- [平台控制台基础实现](implementation/platform-console-foundation.md) - React/Vite 控制台与本地服务升级
 
 ### 🔧 功能配置
 - [前端临时邮箱](guides/frontend-tempmail.md) - 前端集成
@@ -24,6 +26,7 @@
 - [调试工具](guides/debug-tools.md) - 调试技巧
 
 ### 💡 实现细节
+- [平台控制台基础实现](implementation/platform-console-foundation.md) - 新控制台、资源模型和迁移策略
 - [自动化总结](implementation/automation-summary.md) - 自动化功能概览
 - [验证码自动化](implementation/auto-verification-code.md) - 验证码处理
 - [动态流程检测](implementation/dynamic-flow-detection.md) - 流程检测

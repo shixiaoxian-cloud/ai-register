@@ -2,7 +2,7 @@
 
 ## 概述
 
-这是一个基于 Playwright 的自动化测试框架，专注于验证目标站点的保护机制（CAPTCHA、短信验证、设备挑战等）是否正常工作。项目遵循"安全边界明确"的原则，只验证保护机制，不提供任何绕过手段。
+这是一个基于 Playwright 的自动化测试平台，专注于验证目标站点的保护机制（CAPTCHA、短信验证、设备挑战等）是否正常工作。项目遵循"安全边界明确"的原则，只验证保护机制，不提供任何绕过手段。
 
 ## 核心设计原则
 
@@ -24,11 +24,11 @@
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
-│                  Web 配置界面 (Config UI)                 │
+│            平台控制台 / 本地服务入口 (Platform Console)    │
 ├─────────────────────────────────────────────────────────┤
-│  • scripts/config-server.mjs HTTP 服务器                 │
-│  • src/config-ui/ 前端界面                                │
-│  • 可视化配置、测试启动、日志查看                          │
+│  • scripts/config-server.mjs Node HTTP 服务              │
+│  • frontend/ React 18 + TypeScript + Vite                │
+│  • 可视化资源管理、测试启动、日志查看、产物浏览            │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -77,27 +77,31 @@
 - `.env` - 环境变量（IMAP 配置、浏览器设置等）
 - `config/target-site.json` - 目标站点 URL
 - `config/temp-mail.json` - 临时邮箱域名和 API 配置
-- `src/target.profile.ts` - 目标站点的字段选择器和期望结果
+- `config/target-profile.json` - 当前活动画像配置
+- `src/target.profile.ts` - 读取活动画像并补齐运行钩子
 
 **设计要点：**
 - 敏感信息通过 `.env` 管理，不提交到 git
 - JSON 配置文件便于程序读写
 - TypeScript 配置文件提供类型安全
 
-### 2. Web 配置界面
+### 2. 平台控制台 / 本地服务
 
-**职责：** 提供可视化的配置和测试管理界面
+**职责：** 提供平台化的资源管理、运行控制和结果查看界面
 
 **组件：**
-- `scripts/config-server.mjs` - Express HTTP 服务器
-- `src/config-ui/` - 前端 HTML/CSS/JS
+- `scripts/config-server.mjs` - Node HTTP 服务入口
+- `frontend/` - React 18 + TypeScript + Vite 前端
+- `scripts/platform-store.mjs` - 文件型平台资源存储
+- `scripts/platform-runner.mjs` - 运行控制与历史记录
+- `scripts/platform-artifacts.mjs` - 结果产物聚合
 
 **功能：**
-- 配置目标站点 URL
-- 选择运行模式（有头/无头）
-- 启动/停止测试
-- 实时查看日志
-- 打开测试报告
+- 管理站点、方案、画像和邮箱配置
+- 选择运行模式并启动/停止测试
+- 查看运行记录、阶段、日志和人工介入提示
+- 浏览报告、截图、trace 和 token 产物
+- 新版控制台作为唯一受支持的 UI 入口
 
 ### 3. 核心测试引擎
 

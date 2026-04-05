@@ -15,6 +15,10 @@ export interface TokenData {
   idToken: string;
 }
 
+export interface TokenSaveOptions {
+  fileLabel?: string;
+}
+
 export interface Sub2ApiAccount {
   name: string;
   notes: string;
@@ -92,6 +96,34 @@ export interface CPAPayload {
     chatgpt_user_id: string;
     expires_at: number;
   };
+}
+
+function sanitizeFileSegment(value: string, fallback: string): string {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return normalized || fallback;
+}
+
+function buildTokenFilename(
+  tokenData: TokenData,
+  format: 'sub2api' | 'cpa',
+  options: TokenSaveOptions = {}
+): string {
+  const emailSegment = sanitizeFileSegment(tokenData.email, 'token');
+  const labelPrefix = options.fileLabel
+    ? `${sanitizeFileSegment(options.fileLabel, 'run')}__`
+    : '';
+
+  if (format === 'sub2api') {
+    return `${labelPrefix}${emailSegment}.sub2api.json`;
+  }
+
+  return `${labelPrefix}${emailSegment}.json`;
 }
 
 /**
@@ -237,7 +269,8 @@ export function buildCPAPayload(tokenData: TokenData): CPAPayload | null {
 export async function saveTokenToFile(
   tokenData: TokenData,
   outputDir: string,
-  format: 'sub2api' | 'cpa' = 'cpa'
+  format: 'sub2api' | 'cpa' = 'cpa',
+  options: TokenSaveOptions = {}
 ): Promise<string | null> {
   try {
     // 确保输出目录存在
@@ -246,24 +279,21 @@ export async function saveTokenToFile(
     }
 
     let payload: any;
-    let filename: string;
-
     if (format === 'sub2api') {
       payload = buildSub2ApiPayload(tokenData);
       if (!payload) {
         console.error('构建 Sub2Api payload 失败');
         return null;
       }
-      filename = `${tokenData.email}.sub2api.json`;
     } else {
       payload = buildCPAPayload(tokenData);
       if (!payload) {
         console.error('构建 CPA payload 失败');
         return null;
       }
-      filename = `${tokenData.email}.json`;
     }
 
+    const filename = buildTokenFilename(tokenData, format, options);
     const filepath = path.join(outputDir, filename);
     fs.writeFileSync(filepath, JSON.stringify(payload, null, 2), 'utf8');
 
@@ -280,15 +310,16 @@ export async function saveTokenToFile(
  */
 export async function saveTokenToMultipleFormats(
   tokenData: TokenData,
-  baseOutputDir: string
+  baseOutputDir: string,
+  options: TokenSaveOptions = {}
 ): Promise<{ cpa: string | null; sub2api: string | null }> {
   const cpaDir = path.join(baseOutputDir, 'cpa');
   const sub2apiDir = path.join(baseOutputDir, 'sub2api');
 
-  const cpaPath = await saveTokenToFile(tokenData, cpaDir, 'cpa');
+  const cpaPath = await saveTokenToFile(tokenData, cpaDir, 'cpa', options);
   // 只要有 access_token 就保存 Sub2Api 格式
   const sub2apiPath = tokenData.accessToken
-    ? await saveTokenToFile(tokenData, sub2apiDir, 'sub2api')
+    ? await saveTokenToFile(tokenData, sub2apiDir, 'sub2api', options)
     : null;
 
   return {

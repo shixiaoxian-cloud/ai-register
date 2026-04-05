@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { tempMailConfig as activeTempMailConfig } from "../env";
 import { generateEmailLocalPart } from "../utils/email-generator";
 
 /**
@@ -44,6 +45,75 @@ export class TempMailService {
     this.config = config;
   }
 
+  private normalizeEmail(rawEmail: any, fallbackRecipient = ""): Email {
+    return {
+      id:
+        rawEmail?.id ||
+        rawEmail?.message_id ||
+        rawEmail?.email_id ||
+        "",
+      from:
+        rawEmail?.from ||
+        rawEmail?.sender ||
+        rawEmail?.from_address ||
+        "",
+      to:
+        rawEmail?.to ||
+        rawEmail?.recipient ||
+        rawEmail?.full_address ||
+        fallbackRecipient,
+      subject: rawEmail?.subject || rawEmail?.title || "",
+      text_body:
+        rawEmail?.text_body ||
+        rawEmail?.body_text ||
+        rawEmail?.text ||
+        rawEmail?.body ||
+        "",
+      html_body:
+        rawEmail?.html_body ||
+        rawEmail?.body_html ||
+        rawEmail?.html ||
+        "",
+      received_at:
+        rawEmail?.received_at ||
+        rawEmail?.created_at ||
+        new Date().toISOString()
+    };
+  }
+
+  private async hydrateEmail(mailboxId: string, email: Email): Promise<Email> {
+    const needsDetails =
+      Boolean(email.id) &&
+      (!email.from || (!email.text_body && !email.html_body));
+
+    if (!needsDetails) {
+      return email;
+    }
+
+    try {
+      return await this.getEmail(mailboxId, email.id);
+    } catch (error) {
+      console.warn(
+        `[TempMail] Failed to fetch full email ${email.id}, falling back to summary`,
+        error
+      );
+      return email;
+    }
+  }
+
+  private isEmailReceivedAfter(email: Email, receivedAfter?: Date): boolean {
+    if (!receivedAfter) {
+      return true;
+    }
+
+    const receivedAt = Date.parse(email.received_at || "");
+    if (Number.isNaN(receivedAt)) {
+      return true;
+    }
+
+    return receivedAt >= receivedAfter.getTime();
+  }
+
   /**
    * 创建临时邮箱
    * @param localPart 可选的邮箱本地部分，如果不提供则自动生成
@@ -87,7 +157,13 @@ export class TempMailService {
     }
 
     const data = await response.json();
-    return (data.data || []) as Email[];
+    const emails = Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.emails)
+        ? data.emails
+        : [];
+
+    return emails.map((email: any) => this.normalizeEmail(email));
   }
 
   /**
@@ -145,15 +221,7 @@ export class TempMailService {
       }
 
       // 转换为标准的 Email 格式
-      return {
-        id: mailObj.id || mailObj.message_id || '',
-        from: mailObj.from || mailObj.sender || '',
-        to: mailObj.to || mailObj.recipient || emailAddress,
-        subject: mailObj.subject || '',
-        text_body: mailObj.text || mailObj.text_body || mailObj.body || '',
-        html_body: mailObj.html || mailObj.html_body || '',
-        received_at: mailObj.received_at || mailObj.created_at || new Date().toISOString()
-      };
+      return this.normalizeEmail(mailObj, emailAddress);
     } catch (error) {
       console.warn(`[TempMail] Error fetching latest email:`, error);
       return null;
@@ -178,7 +246,7 @@ export class TempMailService {
     }
 
     const data = await response.json();
-    return data as Email;
+    return this.normalizeEmail(data?.email ?? data);
   }
 
   /**
@@ -214,6 +282,7 @@ export class TempMailService {
       filter?: (email: Email) => boolean; // 邮件过滤器
       emailAddress?: string; // 邮箱地址（用于 getLatestEmail API）
       useLatestApi?: boolean; // 是否使用 /api/latest 端点
+      receivedAfter?: Date; // 只接受该时间点之后的新邮件
     } = {}
   ): Promise<Email> {
     const timeout = options.timeout || 180000; // 默认 3 分钟
@@ -289,21 +358,34 @@ export class TempMailService {
         if (newEmails.length > 0) {
           console.log(`[TempMail] Found ${newEmails.length} new email(s)`);
 
+          const hydratedEmails = await Promise.all(
+            newEmails.map((email) => this.hydrateEmail(mailboxId, email))
+          );
+          const orderedEmails = hydratedEmails.sort((left, right) => {
+            const leftTime = Date.parse(left.received_at || "") || 0;
+            const rightTime = Date.parse(right.received_at || "") || 0;
+            return rightTime - leftTime;
+          });
+
+          const recentEmails = orderedEmails.filter((email) =>
+            this.isEmailReceivedAfter(email, options.receivedAfter)
+          );
+
           const filteredEmails = options.filter
-            ? newEmails.filter(email => {
+            ? recentEmails.filter(email => {
                 console.log(`[TempMail] Applying filter to email from: ${email.from}`);
                 const result = options.filter!(email);
                 console.log(`[TempMail] Filter result: ${result}`);
                 return result;
               })
-            : newEmails;
+            : recentEmails;
 
           if (filteredEmails.length > 0) {
             console.log(`[TempMail] ✓ Found matching email!`);
             // 返回最新的邮件
             return filteredEmails[0];
           } else {
-            console.log(`[TempMail] No emails passed the filter`);
+            console.log(`[TempMail] No emails passed the filter or received-after check`);
           }
         } else {
           console.log(`[TempMail] No new emails (all seen before)`);
@@ -332,7 +414,7 @@ export class TempMailService {
    */
   extractVerificationCode(
     email: Email,
-    pattern?: RegExp
+    pattern?: string | RegExp
   ): string | null {
     // 合并所有邮件内容
     const content = [
@@ -375,7 +457,9 @@ export class TempMailService {
 
     // 5. 如果提供了自定义正则，使用它
     if (pattern) {
-      const customMatch = content.match(pattern);
+      const resolvedPattern =
+        typeof pattern === "string" ? new RegExp(pattern) : pattern;
+      const customMatch = content.match(resolvedPattern);
       if (customMatch && customMatch[1]) {
         return customMatch[1];
       }
@@ -439,15 +523,13 @@ export function createTempMailService(
   apiKey?: string
 ): TempMailService {
   const config: TempMailConfig = {
-    baseUrl:
-      baseUrl ||
-      process.env.TEMP_MAIL_BASE_URL ||
-      "http://114.215.173.42:888",
-    apiKey:
-      apiKey ||
-      process.env.TEMP_MAIL_API_KEY ||
-      "tm_admin_36f53ee440748349007538fde32d1aeeb3ac028c804d7b90"
+    baseUrl: baseUrl || activeTempMailConfig.baseUrl,
+    apiKey: apiKey || activeTempMailConfig.apiKey
   };
+
+  if (!config.baseUrl || !config.apiKey) {
+    throw new Error("当前活动方案未配置可用的临时邮箱服务。");
+  }
 
   return new TempMailService(config);
 }

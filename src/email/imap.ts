@@ -15,8 +15,11 @@ function matchesFilter(
   return (value ?? "").toLowerCase().includes(expectedSnippet.toLowerCase());
 }
 
-function extractCode(messageText: string): string | null {
-  const regex = getEmailCodeRegex();
+function extractCode(
+  messageText: string,
+  emailVerification?: EmailVerificationConfig
+): string | null {
+  const regex = getEmailCodeRegex(emailVerification);
   const match = regex.exec(messageText);
   if (!match) {
     return null;
@@ -27,11 +30,12 @@ function extractCode(messageText: string): string | null {
 
 export async function waitForEmailCode(
   receivedAfter: Date,
-  emailVerification: EmailVerificationConfig
+  emailVerification: EmailVerificationConfig,
+  timeoutMs: number = runtimeConfig.emailTimeoutMs
 ): Promise<string> {
   if (!hasImapConfig()) {
     throw new Error(
-      "Email verification is enabled, but IMAP settings are incomplete in .env."
+      "Email verification is enabled, but the active SQLite mail configuration is missing IMAP settings."
     );
   }
 
@@ -49,7 +53,7 @@ export async function waitForEmailCode(
   const lock = await client.getMailboxLock(emailVerification.mailbox ?? "INBOX");
 
   try {
-    const deadline = Date.now() + runtimeConfig.emailTimeoutMs;
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       const searchResult = await client.search({
@@ -89,7 +93,7 @@ export async function waitForEmailCode(
         const rawText = [parsed.subject, parsed.text, parsed.html]
           .filter(Boolean)
           .join("\n");
-        const code = extractCode(rawText);
+        const code = extractCode(rawText, emailVerification);
 
         if (code) {
           return code;
@@ -106,6 +110,6 @@ export async function waitForEmailCode(
   }
 
   throw new Error(
-    `No matching email code arrived within ${runtimeConfig.emailTimeoutMs}ms.`
+    `No matching email code arrived within ${timeoutMs}ms.`
   );
 }

@@ -4,7 +4,11 @@ import type { TestInfo } from "@playwright/test";
 import { getConfiguredStartUrl } from "../src/config/target-site";
 import { requireEnv, runtimeConfig, tempMailConfig } from "../src/env";
 import { waitForEmailCode } from "../src/email/imap";
-import { createTempMailService } from "../src/email/temp-mail";
+import {
+  createTempMailService,
+  type Mailbox,
+  type TempMailService
+} from "../src/email/temp-mail";
 import { waitForKnownOutcome, waitForManualClearance } from "../src/protection";
 import {
   humanDelay,
@@ -20,12 +24,26 @@ import {
   setupTopTierAntiDetection
 } from "../src/stealth/top-tier-bypass";
 import targetProfile from "../src/target.profile";
-import type { FlowStage, OutcomeKind, OutcomeRecord } from "../src/types";
+import type {
+  EmailVerificationConfig,
+  FlowStage,
+  OutcomeKind,
+  OutcomeRecord
+} from "../src/types";
 import type { Page } from "@playwright/test";
 import { generateUserRegistrationInfo } from "../src/utils/user-info-generator";
 import { generateEmailLocalPart } from "../src/utils/email-generator";
 import { saveTokenToMultipleFormats } from "../src/utils/token-saver";
 import type { TokenData } from "../src/utils/token-saver";
+
+const registrationRetryAttempts = Number(
+  process.env.REGISTRATION_RETRY_ATTEMPTS ?? "2"
+);
+const defaultEmailCodeWaitTimeoutMs = 30_000;
+const defaultEmailCodeResendAttempts = 1;
+const emailCodeLookbackWindowMs = 5_000;
+
+test.describe.configure({ retries: registrationRetryAttempts });
 
 async function attachSummary(
   records: OutcomeRecord[],
@@ -72,6 +90,123 @@ function recordOutcome(
   );
 }
 
+class RetryableRegistrationFailure extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RetryableRegistrationFailure";
+  }
+}
+
+const postRegistrationSkipSelector = [
+  'button:has-text("Skip")',
+  'button:has-text("跳过")',
+  'button.btn-ghost:has-text("Skip")',
+  'button.btn-ghost:has(div:has-text("Skip"))',
+  'a:has-text("Skip")',
+  'a:has-text("跳过")'
+].join(", ");
+
+async function detectRegistrationFailure(page: Page): Promise<string | null> {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  const title = await page.title().catch(() => "");
+  const combined = `${title}\n${bodyText}`;
+
+  const isErrorPage =
+    /oops,\s*an error occurred/i.test(combined) ||
+    /operation timed out/i.test(combined);
+
+  if (!isErrorPage) {
+    return null;
+  }
+
+  if (/operation timed out/i.test(combined)) {
+    return "注册流程进入错误页：Operation timed out。视为本次注册失败，将使用新资源重试。";
+  }
+
+  return "注册流程进入通用错误页。视为本次注册失败，将使用新资源重试。";
+}
+
+async function throwIfRegistrationFailed(
+  page: Page,
+  stage: FlowStage,
+  summary: OutcomeRecord[],
+  testInfo: TestInfo
+): Promise<void> {
+  const failureDetails = await detectRegistrationFailure(page);
+  if (!failureDetails) {
+    return;
+  }
+
+  recordOutcome(summary, stage, "unknown", failureDetails, page);
+  await page
+    .screenshot({
+      path: testInfo.outputPath(
+        `registration-failure-${stage}-${Date.now()}.png`
+      ),
+      fullPage: true
+    })
+    .catch(() => undefined);
+
+  throw new RetryableRegistrationFailure(failureDetails);
+}
+
+async function waitForKnownOutcomeWithFailureHandling(
+  page: Page,
+  selectors: typeof targetProfile.selectors,
+  timeoutMs: number,
+  stage: FlowStage,
+  summary: OutcomeRecord[],
+  testInfo: TestInfo
+): Promise<Awaited<ReturnType<typeof waitForKnownOutcome>>> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    await throwIfRegistrationFailed(page, stage, summary, testInfo);
+
+    const outcome = await waitForKnownOutcome(page, selectors, 1_000);
+    if (outcome.kind !== "unknown") {
+      return outcome;
+    }
+  }
+
+  await throwIfRegistrationFailed(page, stage, summary, testInfo);
+
+  return {
+    kind: "unknown",
+    details: `在 ${timeoutMs}ms 内没有出现已配置的成功标记、阻断页、验证码输入框或安全挑战。`
+  };
+}
+
+async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
+  let skippedAny = false;
+
+  // 尝试多次跳过，因为可能有多个引导页
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    const skipButton = page.locator(postRegistrationSkipSelector).first();
+    const skipVisible = await skipButton.isVisible().catch(() => false);
+
+    console.log(`[Flow] Skip button visible (attempt ${attempt}): ${skipVisible}`);
+
+    if (skipVisible) {
+      console.log('[Flow] Preference/onboarding page detected, clicking Skip button');
+      await humanDelay(500, 1000);
+      await humanMouseMove(page);
+      await skipButton.click();
+      await humanDelay(2000, 3000);
+      console.log('[Flow] Skip button clicked, waiting for the next page');
+      skippedAny = true;
+
+      // 继续检查是否还有更多 Skip 按钮
+      continue;
+    }
+
+    // 如果没有 Skip 按钮，等待一下再检查
+    await humanDelay(1500, 2500);
+  }
+
+  return skippedAny;
+}
+
 async function fillPasswordIfVisible(page: Page): Promise<boolean> {
   if (!targetProfile.selectors.password) {
     return false;
@@ -98,9 +233,274 @@ async function isPreAuthChallengePage(page: Page): Promise<boolean> {
   );
 }
 
+function resolvePositiveInteger(
+  value: number | undefined,
+  fallback: number
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.trunc(parsed);
+}
+
+function getEmailVerificationRetryPolicy(
+  emailVerification: EmailVerificationConfig | undefined
+): {
+  waitTimeoutMs: number;
+  resendWaitTimeoutMs: number;
+  resendAttempts: number;
+} {
+  const waitTimeoutMs = resolvePositiveInteger(
+    emailVerification?.waitTimeoutMs,
+    defaultEmailCodeWaitTimeoutMs
+  );
+  const resendWaitTimeoutMs = resolvePositiveInteger(
+    emailVerification?.resendWaitTimeoutMs,
+    waitTimeoutMs
+  );
+  const resendAttempts = Math.max(
+    0,
+    resolvePositiveInteger(
+      emailVerification?.resendAttempts,
+      defaultEmailCodeResendAttempts
+    )
+  );
+
+  return {
+    waitTimeoutMs,
+    resendWaitTimeoutMs,
+    resendAttempts
+  };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function isEmailWaitTimeoutError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  return /No matching email code arrived within|Timeout waiting for email after/i.test(
+    message
+  );
+}
+
+function getAgeFromBirthday(birthday: string, now = new Date()): number {
+  const [yearText, monthText, dayText] = birthday.split("-");
+  const birthYear = Number.parseInt(yearText, 10);
+  const birthMonth = Number.parseInt(monthText, 10);
+  const birthDay = Number.parseInt(dayText, 10);
+
+  if (
+    !Number.isFinite(birthYear) ||
+    !Number.isFinite(birthMonth) ||
+    !Number.isFinite(birthDay)
+  ) {
+    throw new Error(`无效的生日格式，无法计算年龄: ${birthday}`);
+  }
+
+  let age = now.getFullYear() - birthYear;
+  const monthOffset = now.getMonth() + 1 - birthMonth;
+  const dayOffset = now.getDate() - birthDay;
+  const hasHadBirthdayThisYear =
+    monthOffset > 0 || (monthOffset === 0 && dayOffset >= 0);
+
+  if (!hasHadBirthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+async function clickEmailVerificationResend(page: Page): Promise<boolean> {
+  if (!targetProfile.selectors.emailCodeResend) {
+    return false;
+  }
+
+  const resendButton = page.locator(targetProfile.selectors.emailCodeResend).first();
+  const isVisible = await resendButton.isVisible().catch(() => false);
+  console.log(`[Flow] Resend email button visible: ${isVisible}`);
+
+  if (!isVisible) {
+    return false;
+  }
+
+  await resendButton.scrollIntoViewIfNeeded().catch(() => undefined);
+  await humanDelay(500, 1000);
+  await humanMouseMove(page);
+  await resendButton.click();
+  await humanDelay(800, 1500);
+  console.log("[Flow] Resend email button clicked");
+  return true;
+}
+
+async function waitForVerificationCodeOnce(params: {
+  receivedAfter: Date;
+  timeoutMs: number;
+  tempMailService: TempMailService | null;
+  tempMailbox: Mailbox | null;
+  emailVerification: EmailVerificationConfig;
+}): Promise<string> {
+  const {
+    receivedAfter,
+    timeoutMs,
+    tempMailService,
+    tempMailbox,
+    emailVerification
+  } = params;
+
+  if (runtimeConfig.useTempMail) {
+    if (!tempMailService || !tempMailbox) {
+      throw new Error("临时邮箱已启用，但当前运行没有可用的临时邮箱上下文。");
+    }
+
+    console.log("[TempMail] Waiting for verification email...");
+    console.log(`[TempMail] Mailbox ID: ${tempMailbox.id}`);
+    console.log(`[TempMail] Mailbox Address: ${tempMailbox.full_address}`);
+    console.log(`[TempMail] Timeout: ${timeoutMs}ms`);
+    console.log(`[TempMail] Poll Interval: ${runtimeConfig.emailPollIntervalMs}ms`);
+    console.log(`[TempMail] Received After: ${receivedAfter.toISOString()}`);
+    console.log(
+      "[TempMail] Latest email mode enabled: sender/subject filters are skipped"
+    );
+
+    const result = await tempMailService.waitForEmail(tempMailbox.id, {
+      timeout: timeoutMs,
+      interval: runtimeConfig.emailPollIntervalMs,
+      emailAddress: tempMailbox.full_address,
+      useLatestApi: false,
+      receivedAfter
+    });
+
+    console.log(`[TempMail] ✓ Received email from: ${result.from}`);
+    console.log(`[TempMail] ✓ Subject: ${result.subject}`);
+    console.log(
+      `[TempMail] ✓ Text body preview: ${result.text_body?.substring(0, 100)}...`
+    );
+
+    const extractedCode = tempMailService.extractVerificationCode(
+      result,
+      emailVerification.codePattern
+    );
+
+    if (!extractedCode) {
+      console.error("[TempMail] ✗ Failed to extract code from email");
+      console.error(`[TempMail] Email subject: ${result.subject}`);
+      console.error(
+        `[TempMail] Email text: ${result.text_body?.substring(0, 200)}`
+      );
+      throw new Error(
+        `Failed to extract verification code from email: ${result.subject}`
+      );
+    }
+
+    console.log(`[TempMail] ✓ Extracted verification code: ${extractedCode}`);
+    return extractedCode;
+  }
+
+  console.log("[TempMail] Using IMAP method (not temp mail)");
+  return waitForEmailCode(receivedAfter, emailVerification, timeoutMs);
+}
+
+async function waitForVerificationCodeWithRetry(params: {
+  page: Page;
+  receivedAfter: Date;
+  tempMailService: TempMailService | null;
+  tempMailbox: Mailbox | null;
+  emailVerification: EmailVerificationConfig;
+}): Promise<string> {
+  const {
+    page,
+    tempMailService,
+    tempMailbox,
+    emailVerification
+  } = params;
+  const retryPolicy = getEmailVerificationRetryPolicy(emailVerification);
+  let attemptReceivedAfter = params.receivedAfter;
+
+  for (let attempt = 0; attempt <= retryPolicy.resendAttempts; attempt++) {
+    const timeoutMs =
+      attempt === 0 ? retryPolicy.waitTimeoutMs : retryPolicy.resendWaitTimeoutMs;
+
+    console.log(
+      `[Flow] Waiting for email code attempt ${attempt + 1}/${retryPolicy.resendAttempts + 1} (timeout ${timeoutMs}ms)`
+    );
+
+    try {
+      return await waitForVerificationCodeOnce({
+        receivedAfter: attemptReceivedAfter,
+        timeoutMs,
+        tempMailService,
+        tempMailbox,
+        emailVerification
+      });
+    } catch (error) {
+      if (!isEmailWaitTimeoutError(error)) {
+        console.error("[TempMail] ✗ Error waiting for email:", error);
+        throw error;
+      }
+
+      console.warn(
+        `[Flow] Email code wait attempt ${attempt + 1} timed out after ${timeoutMs}ms`
+      );
+
+      if (attempt >= retryPolicy.resendAttempts) {
+        throw new RetryableRegistrationFailure(
+          `邮箱验证码在已配置的 ${retryPolicy.resendAttempts + 1} 次等待内仍未送达（首次 ${retryPolicy.waitTimeoutMs / 1000} 秒，重发后 ${retryPolicy.resendWaitTimeoutMs / 1000} 秒），视为本次注册失败，将使用新资源重试。`
+        );
+      }
+
+      const resendClicked = await clickEmailVerificationResend(page);
+      if (!resendClicked) {
+        throw new RetryableRegistrationFailure(
+          `邮箱验证码在 ${timeoutMs / 1000} 秒内未送达，且未找到可点击的 Resend email 按钮，视为本次注册失败，将使用新资源重试。`
+        );
+      }
+
+      attemptReceivedAfter = new Date();
+      console.log(
+        `[Flow] Waiting for a fresh verification email after resend from ${attemptReceivedAfter.toISOString()}`
+      );
+    }
+  }
+
+  throw new RetryableRegistrationFailure(
+    "邮箱验证码重试流程异常结束，视为本次注册失败，将使用新资源重试。"
+  );
+}
+
+async function submitEmailVerificationCode(page: Page, code: string): Promise<void> {
+  if (!targetProfile.selectors.emailCodeInput) {
+    throw new Error("启用邮箱验证码流程时，必须配置 emailCodeInput 选择器。");
+  }
+
+  console.log(`[Flow] Filling verification code: ${code}`);
+  await humanDelay(800, 1500);
+  await humanType(page, targetProfile.selectors.emailCodeInput, code);
+  console.log("[Flow] ✓ Verification code filled");
+
+  if (targetProfile.selectors.emailCodeSubmit) {
+    console.log("[Flow] Clicking verification code submit button");
+    await humanDelay(500, 1000);
+    await humanMouseMove(page);
+    await page.locator(targetProfile.selectors.emailCodeSubmit).click();
+    console.log("[Flow] ✓ Submit button clicked");
+  }
+
+  await targetProfile.afterEmailCodeFilled?.(page);
+}
+
 test("验证已授权目标站点的保护流程", async ({ page, context }, testInfo) => {
+  console.log(
+    `[Run] Starting registration attempt ${testInfo.retry + 1} / ${registrationRetryAttempts + 1}`
+  );
+
   const summary: OutcomeRecord[] = [];
-  const flowStartedAt = new Date();
   const startUrl = getConfiguredStartUrl();
   const permissionOrigin =
     targetProfile.permissionOrigin ?? new URL(startUrl).origin;
@@ -120,7 +520,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
 
   // 临时邮箱服务（如果启用）
   let tempMailService: ReturnType<typeof createTempMailService> | null = null;
-  let tempMailbox: { id: string; full_address: string } | null = null;
+  let tempMailbox: Mailbox | null = null;
 
   try {
     // 如果使用临时邮箱，先创建邮箱
@@ -262,6 +662,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
     // 点击提交
     await humanDelay(500, 1000);
     await activePage.locator(targetProfile.selectors.submit).click();
+    await throwIfRegistrationFailed(activePage, "email_submitted", summary, testInfo);
 
     let outcomeStage: FlowStage = passwordFilled
       ? "credentials_submitted"
@@ -285,91 +686,24 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
     if (codeInputAppeared) {
       console.log('[Flow] Email verification code input detected');
       outcomeStage = "email_submitted";
+      const emailVerification = targetProfile.emailVerification;
 
       // 直接跳转到验证码处理流程
-      if (!targetProfile.emailVerification?.enabled) {
+      if (!emailVerification?.enabled) {
         throw new Error(
           "页面要求输入邮箱验证码，但 target.profile 中未启用 emailVerification。"
         );
       }
 
-      let code: string;
-
-      // 根据配置选择邮件获取方式
-      if (runtimeConfig.useTempMail && tempMailService && tempMailbox) {
-        console.log(`[TempMail] Waiting for verification email...`);
-        console.log(`[TempMail] Mailbox ID: ${tempMailbox.id}`);
-        console.log(`[TempMail] Mailbox Address: ${tempMailbox.full_address}`);
-        console.log(`[TempMail] Timeout: ${runtimeConfig.emailTimeoutMs}ms`);
-        console.log(`[TempMail] Poll Interval: ${runtimeConfig.emailPollIntervalMs}ms`);
-
-        try {
-          const result = await tempMailService.waitForEmail(tempMailbox.id, {
-            timeout: runtimeConfig.emailTimeoutMs,
-            interval: runtimeConfig.emailPollIntervalMs,
-            emailAddress: tempMailbox.full_address,
-            useLatestApi: true,
-            filter: (email) => {
-              console.log(`[TempMail] Checking email from: ${email.from}, subject: ${email.subject}`);
-              if (targetProfile.emailVerification?.senderFilter) {
-                const matches = email.from.includes(targetProfile.emailVerification.senderFilter);
-                console.log(`[TempMail] Sender filter "${targetProfile.emailVerification.senderFilter}": ${matches}`);
-                return matches;
-              }
-              if (targetProfile.emailVerification?.subjectFilter) {
-                const matches = email.subject.includes(targetProfile.emailVerification.subjectFilter);
-                console.log(`[TempMail] Subject filter "${targetProfile.emailVerification.subjectFilter}": ${matches}`);
-                return matches;
-              }
-              console.log(`[TempMail] No filter, accepting email`);
-              return true;
-            }
-          });
-
-          console.log(`[TempMail] ✓ Received email from: ${result.from}`);
-          console.log(`[TempMail] ✓ Subject: ${result.subject}`);
-          console.log(`[TempMail] ✓ Text body preview: ${result.text_body?.substring(0, 100)}...`);
-
-          const extractedCode = tempMailService.extractVerificationCode(
-            result,
-            targetProfile.emailVerification?.codePattern
-          );
-
-          if (!extractedCode) {
-            console.error(`[TempMail] ✗ Failed to extract code from email`);
-            console.error(`[TempMail] Email subject: ${result.subject}`);
-            console.error(`[TempMail] Email text: ${result.text_body?.substring(0, 200)}`);
-            throw new Error(
-              `Failed to extract verification code from email: ${result.subject}`
-            );
-          }
-
-          code = extractedCode;
-          console.log(`[TempMail] ✓ Extracted verification code: ${code}`);
-        } catch (error) {
-          console.error(`[TempMail] ✗ Error waiting for email:`, error);
-          throw error;
-        }
-      } else {
-        console.log(`[TempMail] Using IMAP method (not temp mail)`);
-        code = await waitForEmailCode(flowStartedAt, targetProfile.emailVerification);
-      }
-
-      // 输入验证码
-      console.log(`[Flow] Filling verification code: ${code}`);
-      await humanDelay(800, 1500);
-      await humanType(activePage, targetProfile.selectors.emailCodeInput!, code);
-      console.log(`[Flow] ✓ Verification code filled`);
-
-      if (targetProfile.selectors.emailCodeSubmit) {
-        console.log(`[Flow] Clicking verification code submit button`);
-        await humanDelay(500, 1000);
-        await humanMouseMove(activePage);
-        await activePage.locator(targetProfile.selectors.emailCodeSubmit).click();
-        console.log(`[Flow] ✓ Submit button clicked`);
-      }
-
-      await targetProfile.afterEmailCodeFilled?.(activePage);
+      const emailCodeRequestedAt = new Date(Date.now() - emailCodeLookbackWindowMs);
+      const code = await waitForVerificationCodeWithRetry({
+        page: activePage,
+        receivedAfter: emailCodeRequestedAt,
+        tempMailService,
+        tempMailbox,
+        emailVerification
+      });
+      await submitEmailVerificationCode(activePage, code);
 
       // 验证码提交后，再次检查是否需要输入密码
       console.log(`[Flow] Waiting after verification code submission...`);
@@ -391,6 +725,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         await humanDelay(500, 1200);
         await humanMouseMove(activePage);
         await activePage.locator(targetProfile.selectors.submit).click();
+        await throwIfRegistrationFailed(activePage, "password_submitted", summary, testInfo);
         outcomeStage = "password_submitted";
       } else {
         outcomeStage = "email_verification_submitted";
@@ -418,14 +753,18 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         await humanDelay(500, 1200);
         await humanMouseMove(activePage);
         await activePage.locator(targetProfile.selectors.submit).click();
+        await throwIfRegistrationFailed(activePage, "password_submitted", summary, testInfo);
         outcomeStage = "password_submitted";
       }
     }
 
-    let outcome = await waitForKnownOutcome(
+    let outcome = await waitForKnownOutcomeWithFailureHandling(
       activePage,
       targetProfile.selectors,
-      30_000
+      30_000,
+      outcomeStage,
+      summary,
+      testInfo
     );
     recordOutcome(summary, outcomeStage, outcome.kind, outcome.details, activePage);
     finalOutcomeKind = outcome.kind;
@@ -433,8 +772,9 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
     // 如果仍然需要验证码（通过 waitForKnownOutcome 检测到）
     if (outcome.kind === "email_code_requested") {
       console.log('[Flow] Email verification code requested (detected by waitForKnownOutcome)');
+      const emailVerification = targetProfile.emailVerification;
 
-      if (!targetProfile.emailVerification?.enabled) {
+      if (!emailVerification?.enabled) {
         throw new Error(
           "页面要求输入邮箱验证码，但 target.profile 中未启用 emailVerification。"
         );
@@ -444,60 +784,23 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         throw new Error("启用邮箱验证码流程时，必须配置 emailCodeInput 选择器。");
       }
 
-      let code: string;
-
-      // 根据配置选择邮件获取方式
-      if (runtimeConfig.useTempMail && tempMailService && tempMailbox) {
-        console.log(`[TempMail] Waiting for verification email...`);
-
-        const result = await tempMailService.waitForEmail(tempMailbox.id, {
-          timeout: runtimeConfig.emailTimeoutMs,
-          interval: runtimeConfig.emailPollIntervalMs,
-          emailAddress: tempMailbox.full_address,
-          useLatestApi: true,
-          filter: (email) => {
-            if (targetProfile.emailVerification?.senderFilter) {
-              return email.from.includes(targetProfile.emailVerification.senderFilter);
-            }
-            if (targetProfile.emailVerification?.subjectFilter) {
-              return email.subject.includes(targetProfile.emailVerification.subjectFilter);
-            }
-            return true;
-          }
-        });
-
-        console.log(`[TempMail] Received email from: ${result.from}`);
-        console.log(`[TempMail] Subject: ${result.subject}`);
-
-        const extractedCode = tempMailService.extractVerificationCode(
-          result,
-          targetProfile.emailVerification?.codePattern
-        );
-
-        if (!extractedCode) {
-          throw new Error(
-            `Failed to extract verification code from email: ${result.subject}`
-          );
-        }
-
-        code = extractedCode;
-        console.log(`[TempMail] Extracted verification code: ${code}`);
-      } else {
-        code = await waitForEmailCode(flowStartedAt, targetProfile.emailVerification);
-      }
-
-      // 输入验证码
-      await humanDelay(800, 1500);
-      await humanType(activePage, targetProfile.selectors.emailCodeInput, code);
-
-      if (targetProfile.selectors.emailCodeSubmit) {
-        await humanDelay(500, 1000);
-        await humanMouseMove(activePage);
-        await activePage.locator(targetProfile.selectors.emailCodeSubmit).click();
-      }
-
-      await targetProfile.afterEmailCodeFilled?.(activePage);
-      outcome = await waitForKnownOutcome(activePage, targetProfile.selectors, 30_000);
+      const emailCodeRequestedAt = new Date(Date.now() - emailCodeLookbackWindowMs);
+      const code = await waitForVerificationCodeWithRetry({
+        page: activePage,
+        receivedAfter: emailCodeRequestedAt,
+        tempMailService,
+        tempMailbox,
+        emailVerification
+      });
+      await submitEmailVerificationCode(activePage, code);
+      outcome = await waitForKnownOutcomeWithFailureHandling(
+        activePage,
+        targetProfile.selectors,
+        30_000,
+        "email_verification_submitted",
+        summary,
+        testInfo
+      );
       recordOutcome(
         summary,
         "email_verification_submitted",
@@ -508,7 +811,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
       finalOutcomeKind = outcome.kind;
     }
 
-    // 检查是否需要填写全名和生日
+    // 检查是否需要填写账户资料（全名、年龄或生日）
     await humanDelay(2000, 3000);
 
     const fullNameVisible = targetProfile.selectors.fullName
@@ -519,63 +822,82 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
           .catch(() => false)
       : false;
 
-    if (fullNameVisible) {
-      console.log('[Flow] Full name and birthday input detected');
+    const ageFieldVisible = targetProfile.selectors.age
+      ? await activePage
+          .locator(targetProfile.selectors.age)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      : false;
 
-      // 填写全名
-      const fullName = `${userInfo.firstName} ${userInfo.lastName}`;
-      console.log(`[UserInfo] Filling full name: ${fullName}`);
-      await humanDelay(500, 1000);
-      await humanType(activePage, targetProfile.selectors.fullName!, fullName);
-
-      // 填写生日或年龄
-      // 先检查是否有 "Age" 字段（新版UI）
-      const ageFieldVisible = await activePage
-        .locator('input[placeholder="Age"], input[aria-label="Age"]')
+    const birthdayFieldVisible =
+      Boolean(
+        targetProfile.selectors.birthdayYear &&
+          targetProfile.selectors.birthdayMonth &&
+          targetProfile.selectors.birthdayDay
+      ) &&
+      await activePage
+        .locator(
+          [
+            targetProfile.selectors.birthdayYear,
+            targetProfile.selectors.birthdayMonth,
+            targetProfile.selectors.birthdayDay
+          ].join(", ")
+        )
         .first()
         .isVisible()
         .catch(() => false);
 
-      if (ageFieldVisible) {
-        // 新版UI：只需要填写年龄
-        console.log(`[UserInfo] Filling age (new UI)`);
-        const birthYear = parseInt(userInfo.birthday.split('-')[0]);
-        const currentYear = new Date().getFullYear();
-        const age = currentYear - birthYear;
+    if (fullNameVisible || ageFieldVisible || birthdayFieldVisible) {
+      console.log(
+        `[Flow] Account details input detected (fullName=${fullNameVisible}, age=${ageFieldVisible}, birthday=${birthdayFieldVisible})`
+      );
+
+      if (fullNameVisible && targetProfile.selectors.fullName) {
+        const fullName = `${userInfo.firstName} ${userInfo.lastName}`;
+        console.log(`[UserInfo] Filling full name: ${fullName}`);
+        await humanDelay(500, 1000);
+        await humanType(activePage, targetProfile.selectors.fullName, fullName);
+      }
+
+      if (ageFieldVisible && targetProfile.selectors.age) {
+        console.log("[UserInfo] Filling age");
+        const age = getAgeFromBirthday(userInfo.birthday);
 
         await humanDelay(300, 600);
-        const ageField = activePage.locator('input[placeholder="Age"], input[aria-label="Age"]').first();
-        // 直接填写，不需要先点击（避免被 label 遮挡）
+        const ageField = activePage.locator(targetProfile.selectors.age).first();
         await ageField.fill(age.toString());
+        await ageField.blur().catch(() => undefined);
         console.log(`[UserInfo] Age filled: ${age}`);
-      } else if (targetProfile.selectors.birthdayYear &&
-          targetProfile.selectors.birthdayMonth &&
-          targetProfile.selectors.birthdayDay) {
-        // 旧版UI：需要填写年月日
-        console.log(`[UserInfo] Filling birthday: ${userInfo.birthday} (old UI)`);
-        const [year, month, day] = userInfo.birthday.split('-');
+      } else if (
+        birthdayFieldVisible &&
+        targetProfile.selectors.birthdayYear &&
+        targetProfile.selectors.birthdayMonth &&
+        targetProfile.selectors.birthdayDay
+      ) {
+        console.log(`[UserInfo] Filling birthday: ${userInfo.birthday}`);
+        const [year, month, day] = userInfo.birthday.split("-");
 
-        // 填写月份
         await humanDelay(300, 600);
-        const monthField = activePage.locator(targetProfile.selectors.birthdayMonth).first();
+        const monthField = activePage
+          .locator(targetProfile.selectors.birthdayMonth)
+          .first();
         await monthField.click();
-        await monthField.fill('');
+        await monthField.fill("");
         await humanType(activePage, targetProfile.selectors.birthdayMonth, month);
 
-        // 填写日期
         await humanDelay(300, 600);
         const dayField = activePage.locator(targetProfile.selectors.birthdayDay).first();
         await dayField.click();
-        await dayField.fill('');
+        await dayField.fill("");
         await humanType(activePage, targetProfile.selectors.birthdayDay, day);
 
-        // 填写年份 (最后填写，避免 spinbutton 截断问题)
         await humanDelay(300, 600);
-        const yearField = activePage.locator(targetProfile.selectors.birthdayYear).first();
+        const yearField = activePage
+          .locator(targetProfile.selectors.birthdayYear)
+          .first();
         await yearField.click();
-        // 对于 spinbutton，使用 fill 而不是 humanType
         await yearField.fill(year);
-        // 触发 blur 事件确保值被接受
         await yearField.blur();
       }
 
@@ -589,32 +911,31 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         await activePage.locator(targetProfile.selectors.submit).click();
       }
 
+      await throwIfRegistrationFailed(
+        activePage,
+        "after_manual_challenge",
+        summary,
+        testInfo
+      );
+
       // 等待页面跳转到 ChatGPT 主页
       await humanDelay(3000, 5000);
 
       console.log(`[Flow] Current URL: ${activePage.url()}`);
 
-      // 检查是否出现 "What brings you to ChatGPT?" 页面，如果有则点击 Skip
-      const skipButtonVisible = await activePage
-        .locator('button:has-text("Skip"), button:has-text("跳过"), button.btn-ghost:has-text("Skip")')
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      console.log(`[Flow] Skip button visible: ${skipButtonVisible}`);
-
-      if (skipButtonVisible) {
-        console.log('[Flow] Onboarding page detected, clicking Skip button');
-        await humanDelay(500, 1000);
-        await humanMouseMove(activePage);
-        await activePage.locator('button:has-text("Skip"), button:has-text("跳过"), button.btn-ghost:has-text("Skip")').first().click();
-        await humanDelay(2000, 3000);
-        console.log('[Flow] Skip button clicked, waiting for main page');
-      }
+      // 注册完成后可能出现偏好页/引导页，优先点击 Skip
+      await dismissPostRegistrationOnboarding(activePage);
 
       // 等待最终结果 (在点击 Skip 之后检查)
       console.log(`[Flow] Checking for success indicators on page: ${activePage.url()}`);
-      outcome = await waitForKnownOutcome(activePage, targetProfile.selectors, 30_000);
+      outcome = await waitForKnownOutcomeWithFailureHandling(
+        activePage,
+        targetProfile.selectors,
+        30_000,
+        "after_manual_challenge",
+        summary,
+        testInfo
+      );
       console.log(`[Flow] Final outcome detected: ${outcome.kind}`);
       recordOutcome(
         summary,
@@ -642,7 +963,14 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         runtimeConfig.manualStepTimeoutMs
       );
 
-      outcome = await waitForKnownOutcome(activePage, targetProfile.selectors, 30_000);
+      outcome = await waitForKnownOutcomeWithFailureHandling(
+        activePage,
+        targetProfile.selectors,
+        30_000,
+        "after_manual_challenge",
+        summary,
+        testInfo
+      );
       recordOutcome(
         summary,
         "after_manual_challenge",
@@ -655,9 +983,13 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
 
     expect(targetProfile.expectedOutcomes).toContain(finalOutcomeKind ?? "unknown");
 
-    // 如果注册成功或到达 ChatGPT 主页，尝试提取并保存 token
-    const shouldExtractTokens = finalOutcomeKind === "success" ||
-                                (finalOutcomeKind === "unknown" && activePage.url().includes("chatgpt.com"));
+    // 允许 chatgpt.com 落地页作为 success 识别失败时的兜底，避免漏掉已登录态的 token 提取
+    // 同时也允许工作区创建页面作为成功标记
+    const shouldExtractTokens =
+      finalOutcomeKind === "success" ||
+      (finalOutcomeKind === "unknown" &&
+       (activePage.url().includes("chatgpt.com") ||
+        activePage.url().includes("create-free-workspace")));
 
     if (shouldExtractTokens) {
       console.log('[Token] Registration completed, attempting to extract tokens...');
@@ -716,9 +1048,55 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
               tokens.accessToken = response.accessToken;
               tokens.refreshToken = response.refreshToken || '';
               tokens.idToken = response.idToken || '';
+            } else {
+              console.log('[Token] API returned no access token, will try page extraction');
             }
           } catch (error) {
             console.log('[Token] Failed to fetch access token from API:', error);
+          }
+        } else {
+          console.log('[Token] No session token found, trying alternative methods...');
+
+          // 尝试导航到主页来获取 session token
+          try {
+            console.log('[Token] Navigating to ChatGPT home to get session...');
+            await activePage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+            await humanDelay(2000, 3000);
+
+            const newCookies = await activePage.context().cookies();
+            for (const cookie of newCookies) {
+              if (cookie.name === '__Secure-next-auth.session-token' || cookie.name === 'next-auth.session-token') {
+                console.log(`[Token] Found session token after navigation: ${cookie.name}`);
+                sessionToken = cookie.value;
+                break;
+              }
+            }
+
+            if (sessionToken) {
+              const response = await activePage.evaluate(async () => {
+                try {
+                  const res = await fetch('https://chatgpt.com/api/auth/session', {
+                    method: 'GET',
+                    credentials: 'include'
+                  });
+                  if (res.ok) {
+                    return await res.json();
+                  }
+                  return null;
+                } catch (e) {
+                  return null;
+                }
+              });
+
+              if (response && response.accessToken) {
+                console.log('[Token] ✓ Successfully fetched access token after navigation');
+                tokens.accessToken = response.accessToken;
+                tokens.refreshToken = response.refreshToken || '';
+                tokens.idToken = response.idToken || '';
+              }
+            }
+          } catch (error) {
+            console.log('[Token] Failed to navigate to home page:', error);
           }
         }
 
@@ -786,7 +1164,12 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
 
           // 保存到本地文件（CPA 和 Sub2Api 格式）
           const outputDir = process.env.TOKEN_OUTPUT_DIR || './output_tokens';
-          const savedPaths = await saveTokenToMultipleFormats(tokenData, outputDir);
+          const requestedRunCount = Number(process.env.PLATFORM_RUN_COUNT || '1');
+          const executionLabel =
+            requestedRunCount > 1 ? `run-${testInfo.repeatEachIndex + 1}` : undefined;
+          const savedPaths = await saveTokenToMultipleFormats(tokenData, outputDir, {
+            fileLabel: executionLabel
+          });
 
           if (savedPaths.cpa) {
             console.log(`[Token] ✓ CPA format saved: ${savedPaths.cpa}`);
@@ -827,6 +1210,10 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
       } catch (error) {
         console.error('[Token] Failed to extract or save tokens:', error);
       }
+    } else {
+      console.log(
+        `[Token] Skipping token extraction because final outcome is ${finalOutcomeKind ?? "unknown"}`
+      );
     }
   } finally {
     await attachSummary(summary, testInfo);

@@ -25,12 +25,14 @@ export interface TargetSelectors {
   submit: string;
   emailCodeInput?: string;
   emailCodeSubmit?: string;
+  emailCodeResend?: string;
   captcha?: string;
   smsChallenge?: string;
   deviceChallenge?: string;
   success?: string;
   blocked?: string;
   fullName?: string;
+  age?: string;
   birthdayYear?: string;
   birthdayMonth?: string;
   birthdayDay?: string;
@@ -42,6 +44,12 @@ export interface EmailVerificationConfig {
   mailbox?: string;
   fromIncludes?: string;
   subjectIncludes?: string;
+  senderFilter?: string;
+  subjectFilter?: string;
+  codePattern?: string | RegExp;
+  waitTimeoutMs?: number;
+  resendWaitTimeoutMs?: number;
+  resendAttempts?: number;
 }
 
 export interface OutcomeRecord {

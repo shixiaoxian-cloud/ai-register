@@ -1,0 +1,34 @@
+schema: spec-driven
+
+context: |
+  Project: ai-register
+  Tech stack: TypeScript, Playwright, Node.js, Express, JSON configuration.
+  Mission boundary: validate target-site protections and flow continuity; never provide bypass techniques for CAPTCHA, SMS verification, or device challenges.
+  Collaboration model:
+  - ai-pm owns product discovery, scope, PRD, interaction, entity modeling, design handoff, and project memory.
+  - OpenSpec owns change proposals, technical design deltas, implementation task tracking, and archive.
+  Proposal gate:
+  - Before entering openspec-propose, present exactly two viable options and wait for explicit user selection.
+  - A recommended option is allowed, but recommendation does not replace user confirmation.
+  Documentation layout:
+  - Product memory: docs/00_MEMORY/, docs/TODO.md
+  - Product assets: docs/01_STRATEGY/, docs/02_PRD/, docs/03_DESIGN/, docs/04_RESOURCES/
+  - Technical reference docs: docs/guides/, docs/implementation/, docs/analysis/, docs/troubleshooting/
+  Change authoring rules:
+  - Reuse existing product artifacts when they exist instead of inventing parallel scope descriptions.
+  - Explicitly call out assumptions when upstream product artifacts are missing or incomplete.
+
+rules:
+  proposal:
+    - Describe the target problem, value anchor, scope, and non-goals in user language.
+    - Reference relevant docs/00_MEMORY, docs/01_STRATEGY, or docs/02_PRD sections when available.
+    - Only author a proposal after the user has selected one of the two presented options.
+    - If the request is still mostly value or scope discovery, stop and use ai-pm before expanding implementation details.
+  design:
+    - Map the solution back to the affected user journey, state changes, and system boundaries.
+    - Preserve the project's safety boundary: validate protection flows, do not design bypass behavior.
+    - Prefer leveraging existing architecture and docs rather than duplicating concepts.
+  tasks:
+    - Break work into small, verifiable steps with explicit validation.
+    - Link each task to the user journey, TODO item, or spec delta it satisfies when possible.
+    - Separate artifact updates from code changes when both are required.

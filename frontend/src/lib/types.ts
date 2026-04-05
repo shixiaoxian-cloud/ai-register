@@ -1,0 +1,230 @@
+export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "alert";
+export type RunMode = "headless" | "headed";
+export type RunStatus = "idle" | "running" | "stopping" | "passed" | "failed" | "stopped";
+
+export interface SiteResource {
+  id?: string;
+  name: string;
+  description: string;
+  startUrl: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlanResource {
+  id?: string;
+  name: string;
+  description: string;
+  siteId: string;
+  profileId: string;
+  mailConfigId: string;
+  runMode: RunMode;
+  continueAfterProtectedChallenge: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EmailVerificationSettings {
+  enabled: boolean;
+  mailbox?: string;
+  fromIncludes?: string;
+  subjectIncludes?: string;
+  senderFilter?: string;
+  subjectFilter?: string;
+  codePattern?: string;
+}
+
+export interface ProfileResource {
+  id?: string;
+  name: string;
+  description: string;
+  expectedOutcomes: string[];
+  grantedPermissions: string[];
+  selectors: Record<string, string>;
+  emailVerification: EmailVerificationSettings;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MailConfigResource {
+  id?: string;
+  name: string;
+  description: string;
+  mode: "temp-mail" | "imap";
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  imapHost: string;
+  imapPort: number;
+  imapSecure: boolean;
+  imapUser: string;
+  imapPass: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SystemSettings {
+  defaultRunMode: RunMode;
+  continueAfterProtectedChallenge: boolean;
+  preferredLandingPage: string;
+  notes: string;
+  updatedAt?: string;
+}
+
+export interface PlatformState {
+  selectedSiteId: string;
+  selectedPlanId: string;
+  selectedProfileId: string;
+  selectedMailConfigId: string;
+  sites: SiteResource[];
+  plans: PlanResource[];
+  profiles: ProfileResource[];
+  mailConfigs: MailConfigResource[];
+  system: SystemSettings;
+  updatedAt: string;
+}
+
+export interface ReadinessMap {
+  mailConfigs: Record<
+    string,
+    {
+      ready: boolean;
+      label: string;
+      detail: string;
+    }
+  >;
+}
+
+export interface HealthCard {
+  id: string;
+  label: string;
+  tone: Tone;
+  detail: string;
+}
+
+export interface RunStageSnapshot {
+  stageLabel: string;
+  outcomeKind: string;
+  url: string;
+  details: string;
+}
+
+export interface RunInsight {
+  type: string;
+  title: string;
+  message: string;
+  action: string;
+}
+
+export interface RunConclusion {
+  tone: Tone;
+  title: string;
+  summary: string;
+  detail: string;
+  action: string;
+}
+
+export interface LogEntry {
+  at: string;
+  stream: string;
+  text: string;
+}
+
+export interface RunRecord {
+  id: string;
+  taskId?: string;
+  caseId?: string;
+  planId: string;
+  planName: string;
+  siteId: string;
+  siteName: string;
+  profileId: string;
+  mailConfigId: string | null;
+  status: RunStatus;
+  mode: RunMode;
+  summary: string;
+  command: string;
+  startedAt: string;
+  finishedAt: string;
+  exitCode: number | null;
+  logs: LogEntry[];
+  latestStage: RunStageSnapshot | null;
+  insight: RunInsight | null;
+  conclusion: RunConclusion | null;
+  artifactKeys: string[];
+  reportAvailable: boolean;
+  pid?: number | null;
+}
+
+export interface TaskRecord {
+  id: string;
+  name: string;
+  status: string;
+  sourceKind: string;
+  sourceRef: string;
+  createdAt: string;
+  updatedAt: string;
+  caseCount?: number;
+  runCount?: number;
+  artifactCount?: number;
+}
+
+export interface CaseRecord {
+  id: string;
+  taskId: string;
+  name: string;
+  status: string;
+  sourceKind: string;
+  sourceRef: string;
+  createdAt: string;
+  updatedAt: string;
+  runCount?: number;
+  artifactCount?: number;
+}
+
+export interface OverviewData {
+  summary: {
+    siteCount: number;
+    planCount: number;
+    profileCount: number;
+    mailConfigCount: number;
+    artifactCount: number;
+    readySites: number;
+    readyMailConfigs: number;
+    reportCount: number;
+    tokenCount: number;
+    failedRuns: number;
+    activeRunStatus: string;
+  };
+  health: HealthCard[];
+  recentRuns: RunRecord[];
+  featuredSite: SiteResource | null;
+  featuredPlan: PlanResource | null;
+  system: SystemSettings;
+  updatedAt: string;
+}
+
+export interface ArtifactEntry {
+  id: string;
+  bucket: string;
+  type: string;
+  name: string;
+  relPath: string;
+  absolutePath: string;
+  modifiedAt: string;
+  sizeBytes: number;
+  href: string;
+  runId: string | null;
+  taskId?: string | null;
+  caseId?: string | null;
+  contentType?: string;
+  storageKind?: string;
+}
+
+export interface MailTestResult {
+  success: boolean;
+  message: string;
+  mode: string;
+  testEmail?: string;
+}

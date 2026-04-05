@@ -1,16 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
+import { readActivePlatformContext } from "./platform-sqlite";
 
 export interface TargetSiteConfig {
   startUrl: string;
   updatedAt?: string;
 }
-
-export const TARGET_SITE_CONFIG_PATH = path.resolve(
-  process.cwd(),
-  "config",
-  "target-site.json"
-);
 
 export function validateHttpsUrl(input: string): string {
   let parsed: URL;
@@ -33,19 +26,11 @@ export function validateHttpsUrl(input: string): string {
 }
 
 export function readTargetSiteConfig(): TargetSiteConfig {
-  if (!existsSync(TARGET_SITE_CONFIG_PATH)) {
-    return {
-      startUrl: "",
-      updatedAt: ""
-    };
-  }
-
-  const rawText = readFileSync(TARGET_SITE_CONFIG_PATH, "utf8");
-  const parsed = JSON.parse(rawText) as Partial<TargetSiteConfig>;
+  const context = readActivePlatformContext();
 
   return {
-    startUrl: parsed.startUrl?.trim() ?? "",
-    updatedAt: parsed.updatedAt ?? ""
+    startUrl: context.site.startUrl.trim(),
+    updatedAt: context.site.updatedAt
   };
 }
 
@@ -54,10 +39,9 @@ export function getConfiguredStartUrl(): string {
 
   if (!config.startUrl) {
     throw new Error(
-      `尚未配置测试站点地址。请先运行 npm run config:ui，并在浏览器界面中保存一个 https:// 地址。`
+      "当前活动方案尚未配置测试站点地址。请先运行 npm run config:ui，并在控制台保存一个 https:// 地址。"
     );
   }
 
   return validateHttpsUrl(config.startUrl);
 }
-

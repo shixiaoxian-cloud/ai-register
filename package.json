@@ -5,6 +5,10 @@
   "description": "Playwright harness for validating authorized third-party protection journeys without bypassing them.",
   "scripts": {
     "config:ui": "node ./scripts/config-server.mjs",
+    "console:dev": "vite --config frontend/vite.config.ts",
+    "console:build": "vite build --config frontend/vite.config.ts",
+    "console:preview": "vite preview --config frontend/vite.config.ts",
+    "console:typecheck": "tsc -p frontend/tsconfig.json --noEmit",
     "pw:install": "playwright install chromium",
     "test": "playwright test tests/protection-validation.spec.ts",
     "test:headed": "playwright test tests/protection-validation.spec.ts --headed",
@@ -15,13 +19,18 @@
     "typecheck": "tsc --noEmit",
     "debug:tempmail": "node scripts/debug-tempmail.js",
     "debug:api": "bash scripts/verify-tempmail-api.sh",
-    "debug:test": "playwright test tests/debug-tempmail.spec.ts",
-    "log:watch": "node scripts/watch-logs.js",
-    "log:server": "ts-node scripts/log-server.ts",
-    "log:viewer": "open http://localhost:3101 || start http://localhost:3101"
+    "debug:test": "playwright test tests/debug-tempmail.spec.ts"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1"
   },
   "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@playwright/test": "^1.55.0",
+    "@vitejs/plugin-react": "^5.0.4",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.6.0",
     "@types/node-fetch": "^2.6.13",
@@ -32,6 +41,7 @@
     "node-fetch": "^2.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
+    "vite": "^7.1.10",
     "ws": "^8.16.0"
   }
 }
