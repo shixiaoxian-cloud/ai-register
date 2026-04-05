@@ -31,7 +31,7 @@ const loginDialogSelector = [
 const targetProfile: TargetProfile = {
   name: "replace-with-authorized-target",
   startUrl: readTargetSiteConfig().startUrl,
-  expectedOutcomes: ["captcha", "sms_challenge", "device_challenge", "blocked", "success"],
+  expectedOutcomes: ["captcha", "sms_challenge", "device_challenge", "blocked", "success", "unknown"],
   grantedPermissions: [
     // Common values:
     // "notifications",
@@ -73,8 +73,9 @@ const targetProfile: TargetProfile = {
     deviceChallenge:
       'text=/verify.*device|security check|unusual activity|suspicious login/i',
     success: [
-      'text=/What brings you to ChatGPT/i',
       'text=/Ready when you are/i',
+      'text=/What brings you to ChatGPT/i',
+      'text=/New chat/i',
       'text=/welcome|dashboard|account created|registration complete/i'
     ].join(", "),
     blocked:

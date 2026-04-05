@@ -528,12 +528,31 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
       await humanDelay(500, 1000);
       await humanType(activePage, targetProfile.selectors.fullName!, fullName);
 
-      // 填写生日
-      if (targetProfile.selectors.birthdayYear &&
+      // 填写生日或年龄
+      // 先检查是否有 "Age" 字段（新版UI）
+      const ageFieldVisible = await activePage
+        .locator('input[placeholder="Age"], input[aria-label="Age"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      if (ageFieldVisible) {
+        // 新版UI：只需要填写年龄
+        console.log(`[UserInfo] Filling age (new UI)`);
+        const birthYear = parseInt(userInfo.birthday.split('-')[0]);
+        const currentYear = new Date().getFullYear();
+        const age = currentYear - birthYear;
+
+        await humanDelay(300, 600);
+        const ageField = activePage.locator('input[placeholder="Age"], input[aria-label="Age"]').first();
+        await ageField.click();
+        await ageField.fill(age.toString());
+        console.log(`[UserInfo] Age filled: ${age}`);
+      } else if (targetProfile.selectors.birthdayYear &&
           targetProfile.selectors.birthdayMonth &&
           targetProfile.selectors.birthdayDay) {
-
-        console.log(`[UserInfo] Filling birthday: ${userInfo.birthday}`);
+        // 旧版UI：需要填写年月日
+        console.log(`[UserInfo] Filling birthday: ${userInfo.birthday} (old UI)`);
         const [year, month, day] = userInfo.birthday.split('-');
 
         // 填写月份
@@ -570,9 +589,33 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         await activePage.locator(targetProfile.selectors.submit).click();
       }
 
-      // 等待最终结果
+      // 等待页面跳转到 ChatGPT 主页
       await humanDelay(3000, 5000);
+
+      console.log(`[Flow] Current URL: ${activePage.url()}`);
+
+      // 检查是否出现 "What brings you to ChatGPT?" 页面，如果有则点击 Skip
+      const skipButtonVisible = await activePage
+        .locator('button:has-text("Skip"), button:has-text("跳过"), button.btn-ghost:has-text("Skip")')
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      console.log(`[Flow] Skip button visible: ${skipButtonVisible}`);
+
+      if (skipButtonVisible) {
+        console.log('[Flow] Onboarding page detected, clicking Skip button');
+        await humanDelay(500, 1000);
+        await humanMouseMove(activePage);
+        await activePage.locator('button:has-text("Skip"), button:has-text("跳过"), button.btn-ghost:has-text("Skip")').first().click();
+        await humanDelay(2000, 3000);
+        console.log('[Flow] Skip button clicked, waiting for main page');
+      }
+
+      // 等待最终结果 (在点击 Skip 之后检查)
+      console.log(`[Flow] Checking for success indicators on page: ${activePage.url()}`);
       outcome = await waitForKnownOutcome(activePage, targetProfile.selectors, 30_000);
+      console.log(`[Flow] Final outcome detected: ${outcome.kind}`);
       recordOutcome(
         summary,
         "after_manual_challenge",
