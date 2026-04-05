@@ -710,7 +710,19 @@
         <div class="card log-shell">
           <div class="log-toolbar">
             <div class="log-note">最多保留最近 400 条日志。测试运行中会自动刷新。</div>
-            <button type="button" class="secondary" id="refreshRunButton">刷新状态</button>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="text" id="logSearch" placeholder="搜索日志..." style="width: 200px; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(19, 33, 29, 0.12); font-size: 13px;">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                <input type="checkbox" id="autoScroll" checked>
+                自动滚动
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                <input type="checkbox" id="colorLogs" checked>
+                彩色日志
+              </label>
+              <button type="button" class="secondary" id="refreshRunButton">刷新状态</button>
+              <button type="button" class="secondary" id="clearLogsButton">清空日志</button>
+            </div>
           </div>
           <pre id="logOutput">暂无测试日志。</pre>
         </div>
@@ -756,7 +768,118 @@
       const runFinishedAt = document.getElementById("runFinishedAt");
       const runExitCode = document.getElementById("runExitCode");
       const logOutput = document.getElementById("logOutput");
+      const logSearch = document.getElementById("logSearch");
+      const autoScroll = document.getElementById("autoScroll");
+      const colorLogs = document.getElementById("colorLogs");
+      const clearLogsButton = document.getElementById("clearLogsButton");
       let pollTimer = null;
+
+      // 日志颜色映射
+      const logColors = {
+        TempMail: '#4fc1ff',
+        Flow: '#4ec9b0',
+        UserInfo: '#c586c0',
+        Expert: '#dcdcaa',
+        TopTier: '#ce9178',
+        DEBUG: '#858585',
+        ERROR: '#f48771',
+        WARNING: '#dcdcaa',
+        SUCCESS: '#4ec9b0'
+      };
+
+      // 解析日志级别和标签
+      function parseLogEntry(text) {
+        const tagMatch = text.match(/\[([^\]]+)\]/);
+        const tag = tagMatch ? tagMatch[1] : null;
+
+        let level = 'info';
+        if (text.includes('✓') || text.includes('成功')) level = 'success';
+        else if (text.includes('✗') || text.includes('失败') || text.includes('error')) level = 'error';
+        else if (text.includes('警告') || text.includes('warning')) level = 'warning';
+        else if (text.includes('[DEBUG]')) level = 'debug';
+
+        return { tag, level, text };
+      }
+
+      // 高亮搜索词
+      function highlightSearch(text, searchTerm) {
+        if (!searchTerm) return text;
+        const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return text.replace(regex, '<span style="background: #e8ab02; color: #1e1e1e; padding: 0 2px;">$1</span>');
+      }
+
+      // 应用日志颜色
+      function colorizeLog(text, entry) {
+        if (!colorLogs.checked) return text;
+
+        let colored = text;
+
+        // 标签颜色
+        if (entry.tag && logColors[entry.tag]) {
+          colored = colored.replace(
+            `[${entry.tag}]`,
+            `<span style="color: ${logColors[entry.tag]}; font-weight: 600;">[${entry.tag}]</span>`
+          );
+        }
+
+        // 成功标记
+        if (entry.level === 'success') {
+          colored = colored.replace(/✓/g, '<span style="color: #4ec9b0;">✓</span>');
+        }
+
+        // 错误标记
+        if (entry.level === 'error') {
+          colored = colored.replace(/✗/g, '<span style="color: #f48771;">✗</span>');
+        }
+
+        // 数字高亮
+        colored = colored.replace(/\b(\d+)\b/g, '<span style="color: #b5cea8;">$1</span>');
+
+        // URL 高亮
+        colored = colored.replace(/(https?:\/\/[^\s]+)/g, '<span style="color: #4fc1ff;">$1</span>');
+
+        return colored;
+      }
+
+      // 渲染日志
+      function renderLogs(logs) {
+        const searchTerm = logSearch.value.toLowerCase();
+
+        if (!Array.isArray(logs) || logs.length === 0) {
+          logOutput.innerHTML = '暂无测试日志。';
+          return;
+        }
+
+        const filteredLogs = logs.filter(entry => {
+          if (!searchTerm) return true;
+          return entry.text.toLowerCase().includes(searchTerm);
+        });
+
+        if (filteredLogs.length === 0) {
+          logOutput.innerHTML = `未找到包含 "${logSearch.value}" 的日志。`;
+          return;
+        }
+
+        const rendered = filteredLogs.map(entry => {
+          const parsed = parseLogEntry(entry.text);
+          let line = `[${formatDateTime(entry.at)}] [${entry.stream}] ${entry.text}`;
+
+          // 应用搜索高亮
+          line = highlightSearch(line, logSearch.value);
+
+          // 应用颜色
+          line = colorizeLog(line, parsed);
+
+          return line;
+        }).join('\n');
+
+        logOutput.innerHTML = rendered;
+
+        // 自动滚动
+        if (autoScroll.checked) {
+          logOutput.scrollTop = logOutput.scrollHeight;
+        }
+      }
 
       function setStatus(target, message, kind) {
         target.textContent = message;
@@ -856,8 +979,9 @@
         runStartedAt.textContent = formatDateTime(run?.startedAt || "");
         runFinishedAt.textContent = formatDateTime(run?.finishedAt || "");
         runExitCode.textContent = run?.exitCode === null || run?.exitCode === undefined ? "-" : String(run.exitCode);
-        logOutput.textContent = logs.length > 0 ? logs.map((entry) => `[${formatDateTime(entry.at)}] [${entry.stream}] ${entry.text}`).join("\n") : "暂无测试日志。";
-        logOutput.scrollTop = logOutput.scrollHeight;
+
+        // 使用新的日志渲染函数
+        renderLogs(logs);
 
         if (conclusion) {
           runConclusionCard.className = `conclusion-card visible tone-${conclusion.tone || "neutral"}`;
@@ -1106,6 +1230,21 @@
         } finally {
           testTempMailButton.disabled = false;
         }
+      });
+
+      // 日志搜索
+      logSearch.addEventListener("input", () => {
+        loadRun(false).catch(() => undefined);
+      });
+
+      // 彩色日志切换
+      colorLogs.addEventListener("change", () => {
+        loadRun(false).catch(() => undefined);
+      });
+
+      // 清空日志
+      clearLogsButton.addEventListener("click", () => {
+        logOutput.innerHTML = '日志已清空。点击"刷新状态"重新加载。';
       });
 
       Promise.all([

@@ -25,6 +25,10 @@
 - [自动生成指南](guides/auto-generation.md)
 - [密码流程说明](guides/password-flow.md)
 - [调试工具指南](guides/debug-tools.md)
+- [实时日志指南](guides/realtime-log.md)
+- [日志查看器指南](guides/log-viewer.md)
+- [快速参考](guides/quick-reference.md)
+- [Token 提取指南](guides/token-extraction.md)
 
 ### 故障排除
 - [403 错误诊断](troubleshooting/403-diagnosis.md)
@@ -36,6 +40,8 @@
 - [快速修复建议](troubleshooting/quick-fix-recommendations.md)
 - [快速修复](troubleshooting/quick-fix.md)
 - [常见问题](troubleshooting/general.md)
+- [配置界面故障排除](troubleshooting/config-ui.md)
+- [测试启动修复](troubleshooting/test-launch-fix.md)
 
 ### 实现总结
 - [自动化功能总结](implementation/automation-summary.md)
@@ -50,6 +56,11 @@
 - [配置总结](implementation/configuration-summary.md)
 - [实现总结（中文）](implementation/summary-cn.md)
 - [实现总结（英文）](implementation/summary-en.md)
+- [日志查看器集成](implementation/log-viewer-integration.md)
+- [实时日志完成总结](implementation/realtime-log-complete.md)
+- [Token 保存实现](implementation/token-save-implementation.md)
+- [功能实现完成](implementation/implementation-complete.md)
+- [实现报告](implementation/IMPLEMENTATION-REPORT.md)
 
 ### 技术分析
 - [反检测策略](analysis/anti-detection.md)
@@ -81,8 +92,8 @@
 
 ## 文档统计
 
-- 使用指南：8 篇
-- 故障排除：9 篇
-- 实现总结：12 篇
+- 使用指南：12 篇
+- 故障排除：11 篇
+- 实现总结：17 篇
 - 技术分析：8 篇
-- **总计：37 篇技术文档**
+- **总计：48 篇技术文档**

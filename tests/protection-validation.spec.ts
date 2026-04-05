@@ -536,13 +536,6 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         console.log(`[UserInfo] Filling birthday: ${userInfo.birthday}`);
         const [year, month, day] = userInfo.birthday.split('-');
 
-        // 填写年份
-        await humanDelay(500, 800);
-        const yearField = activePage.locator(targetProfile.selectors.birthdayYear).first();
-        await yearField.click();
-        await yearField.fill('');
-        await humanType(activePage, targetProfile.selectors.birthdayYear, year);
-
         // 填写月份
         await humanDelay(300, 600);
         const monthField = activePage.locator(targetProfile.selectors.birthdayMonth).first();
@@ -556,6 +549,15 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         await dayField.click();
         await dayField.fill('');
         await humanType(activePage, targetProfile.selectors.birthdayDay, day);
+
+        // 填写年份 (最后填写，避免 spinbutton 截断问题)
+        await humanDelay(300, 600);
+        const yearField = activePage.locator(targetProfile.selectors.birthdayYear).first();
+        await yearField.click();
+        // 对于 spinbutton，使用 fill 而不是 humanType
+        await yearField.fill(year);
+        // 触发 blur 事件确保值被接受
+        await yearField.blur();
       }
 
       // 点击完成账户创建按钮

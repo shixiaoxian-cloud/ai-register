@@ -38,6 +38,7 @@ export interface Email {
  */
 export class TempMailService {
   private config: TempMailConfig;
+  private latestApiAvailable: boolean = true; // Track if /api/latest works
 
   constructor(config: TempMailConfig) {
     this.config = config;
@@ -105,9 +106,15 @@ export class TempMailService {
       );
 
       if (!response.ok) {
-        console.warn(
-          `[TempMail] Failed to get latest email: status=${response.status} email=${emailAddress}`
-        );
+        if (response.status === 404) {
+          console.warn(
+            `[TempMail] /api/latest returned 404 - endpoint may not exist or no email found yet`
+          );
+        } else {
+          console.warn(
+            `[TempMail] Failed to get latest email: status=${response.status} email=${emailAddress}`
+          );
+        }
         return null;
       }
 
@@ -214,6 +221,7 @@ export class TempMailService {
     const startTime = Date.now();
     const seenIds = new Set<string>();
     let attemptCount = 0;
+    let consecutive404Count = 0; // Track consecutive 404 failures
 
     console.log(`[TempMail] Starting email polling...`);
     console.log(`[TempMail] - Timeout: ${timeout}ms (${timeout / 1000}s)`);
@@ -229,18 +237,32 @@ export class TempMailService {
       let emails: Email[] = [];
 
       try {
-        // 如果提供了邮箱地址且启用了 latest API，使用 getLatestEmail
-        if (options.useLatestApi && options.emailAddress) {
+        // If /api/latest is available and enabled, try it first
+        if (this.latestApiAvailable && options.useLatestApi && options.emailAddress) {
           console.log(`[TempMail] Fetching latest email via /api/latest...`);
           const latestEmail = await this.getLatestEmail(options.emailAddress);
           if (latestEmail) {
             console.log(`[TempMail] ✓ Got latest email: from=${latestEmail.from}, subject=${latestEmail.subject}`);
             emails = [latestEmail];
+            consecutive404Count = 0; // Reset counter on success
           } else {
             console.log(`[TempMail] No email found yet`);
+            consecutive404Count++;
+
+            // After 2 consecutive 404s, fall back to mailbox API
+            if (consecutive404Count >= 2) {
+              console.warn(`[TempMail] /api/latest endpoint unavailable after ${consecutive404Count} attempts, falling back to mailbox API`);
+              console.warn(`[TempMail] Switching to /api/mailboxes/${mailboxId}/emails for remaining attempts`);
+              this.latestApiAvailable = false;
+
+              // Immediately try the mailbox API instead of waiting
+              console.log(`[TempMail] Fetching emails via /api/mailboxes/${mailboxId}/emails...`);
+              emails = await this.getEmails(mailboxId);
+              console.log(`[TempMail] ✓ Got ${emails.length} email(s)`);
+            }
           }
         } else {
-          // 否则使用标准的 getEmails
+          // Use standard getEmails endpoint
           console.log(`[TempMail] Fetching emails via /api/mailboxes/${mailboxId}/emails...`);
           emails = await this.getEmails(mailboxId);
           console.log(`[TempMail] ✓ Got ${emails.length} email(s)`);

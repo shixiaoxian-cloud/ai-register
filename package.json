@@ -6,24 +6,32 @@
   "scripts": {
     "config:ui": "node ./scripts/config-server.mjs",
     "pw:install": "playwright install chromium",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
+    "test": "playwright test tests/protection-validation.spec.ts",
+    "test:headed": "playwright test tests/protection-validation.spec.ts --headed",
+    "test:all": "playwright test",
+    "test:all:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "debug:tempmail": "node scripts/debug-tempmail.js",
     "debug:api": "bash scripts/verify-tempmail-api.sh",
-    "debug:test": "playwright test tests/debug-tempmail.spec.ts"
+    "debug:test": "playwright test tests/debug-tempmail.spec.ts",
+    "log:watch": "node scripts/watch-logs.js",
+    "log:server": "ts-node scripts/log-server.ts",
+    "log:viewer": "open http://localhost:3101 || start http://localhost:3101"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/mailparser": "^3.4.6",
     "@types/node": "^24.6.0",
     "@types/node-fetch": "^2.6.13",
+    "@types/ws": "^8.5.10",
     "dotenv": "^17.2.2",
     "imapflow": "^1.0.191",
     "mailparser": "^3.7.4",
     "node-fetch": "^2.7.0",
-    "typescript": "^5.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
+    "ws": "^8.16.0"
   }
 }

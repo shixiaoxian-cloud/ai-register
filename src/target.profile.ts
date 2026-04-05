@@ -31,7 +31,7 @@ const loginDialogSelector = [
 const targetProfile: TargetProfile = {
   name: "replace-with-authorized-target",
   startUrl: readTargetSiteConfig().startUrl,
-  expectedOutcomes: ["captcha", "sms_challenge", "device_challenge", "blocked"],
+  expectedOutcomes: ["captcha", "sms_challenge", "device_challenge", "blocked", "success"],
   grantedPermissions: [
     // Common values:
     // "notifications",
@@ -63,17 +63,20 @@ const targetProfile: TargetProfile = {
     ].join(", "),
     emailCodeSubmit: [
       'button[type="submit"][name="intent"][value="validate"]',
-      'button[data-dd-action-name="Continue"][type="submit"]',
-      'button._root_3rdp0_62._primary_3rdp0_107[type="submit"]',
+      'button[data-dd-action-name="Continue"][type="submit"]:not([value="resend"])',
+      'button._root_3rdp0_62._primary_3rdp0_107[type="submit"]:has-text("Continue")',
       'button[type="submit"]:has-text("继续")',
-      'button[type="submit"]:has-text("Continue")',
-      'button[type="submit"]'
+      'button[type="submit"]:has-text("Continue"):not(:has-text("Resend"))'
     ].join(", "),
     captcha: 'iframe[title*="captcha"], .g-recaptcha, [data-testid="captcha"]',
     smsChallenge: 'input[name="smsCode"], [data-testid="sms-challenge"]',
     deviceChallenge:
       'text=/verify.*device|security check|unusual activity|suspicious login/i',
-    success: 'text=/welcome|dashboard|account created|registration complete/i',
+    success: [
+      'text=/What brings you to ChatGPT/i',
+      'text=/Ready when you are/i',
+      'text=/welcome|dashboard|account created|registration complete/i'
+    ].join(", "),
     blocked:
       'text=/access denied|temporarily blocked|suspicious activity detected|try again later/i',
     fullName: [
