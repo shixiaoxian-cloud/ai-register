@@ -10,7 +10,10 @@
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "debug:tempmail": "node scripts/debug-tempmail.js",
+    "debug:api": "bash scripts/verify-tempmail-api.sh",
+    "debug:test": "playwright test tests/debug-tempmail.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

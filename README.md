@@ -100,3 +100,14 @@ npm run test:ui
 
 - 我们自己的测试提示、结果文案和用例标题已经改成中文
 - Playwright 自带的 HTML 报告框架界面大多仍是英文，这是工具本身的表现
+
+## 6. 文档
+
+详细的技术文档已整理到 [docs/](docs/) 目录：
+
+- **[使用指南](docs/guides/)** - Chrome 设置、临时邮箱、密码流程等
+- **[故障排除](docs/troubleshooting/)** - 403 错误、验证码调试、常见问题
+- **[实现总结](docs/implementation/)** - 自动化功能、动态检测、配置说明
+- **[技术分析](docs/analysis/)** - 反检测策略、隐身技术、专家报告
+
+查看 [docs/README.md](docs/README.md) 获取完整文档索引。

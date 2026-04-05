@@ -265,7 +265,137 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
       ? "credentials_submitted"
       : "email_submitted";
 
-    if (!passwordFilled) {
+    // 提交后，检测下一步是什么：密码输入 或 验证码输入
+    console.log('[Flow] Detecting next step after email submission...');
+
+    // 等待页面响应（密码框、验证码框或其他结果）
+    await humanDelay(2000, 3000);
+
+    // 检查是否出现验证码输入框
+    const codeInputAppeared = targetProfile.selectors.emailCodeInput
+      ? await activePage
+          .locator(targetProfile.selectors.emailCodeInput)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      : false;
+
+    if (codeInputAppeared) {
+      console.log('[Flow] Email verification code input detected');
+      outcomeStage = "email_submitted";
+
+      // 直接跳转到验证码处理流程
+      if (!targetProfile.emailVerification?.enabled) {
+        throw new Error(
+          "页面要求输入邮箱验证码，但 target.profile 中未启用 emailVerification。"
+        );
+      }
+
+      let code: string;
+
+      // 根据配置选择邮件获取方式
+      if (runtimeConfig.useTempMail && tempMailService && tempMailbox) {
+        console.log(`[TempMail] Waiting for verification email...`);
+        console.log(`[TempMail] Mailbox ID: ${tempMailbox.id}`);
+        console.log(`[TempMail] Mailbox Address: ${tempMailbox.full_address}`);
+        console.log(`[TempMail] Timeout: ${runtimeConfig.emailTimeoutMs}ms`);
+        console.log(`[TempMail] Poll Interval: ${runtimeConfig.emailPollIntervalMs}ms`);
+
+        try {
+          const result = await tempMailService.waitForEmail(tempMailbox.id, {
+            timeout: runtimeConfig.emailTimeoutMs,
+            interval: runtimeConfig.emailPollIntervalMs,
+            emailAddress: tempMailbox.full_address,
+            useLatestApi: true,
+            filter: (email) => {
+              console.log(`[TempMail] Checking email from: ${email.from}, subject: ${email.subject}`);
+              if (targetProfile.emailVerification?.senderFilter) {
+                const matches = email.from.includes(targetProfile.emailVerification.senderFilter);
+                console.log(`[TempMail] Sender filter "${targetProfile.emailVerification.senderFilter}": ${matches}`);
+                return matches;
+              }
+              if (targetProfile.emailVerification?.subjectFilter) {
+                const matches = email.subject.includes(targetProfile.emailVerification.subjectFilter);
+                console.log(`[TempMail] Subject filter "${targetProfile.emailVerification.subjectFilter}": ${matches}`);
+                return matches;
+              }
+              console.log(`[TempMail] No filter, accepting email`);
+              return true;
+            }
+          });
+
+          console.log(`[TempMail] ✓ Received email from: ${result.from}`);
+          console.log(`[TempMail] ✓ Subject: ${result.subject}`);
+          console.log(`[TempMail] ✓ Text body preview: ${result.text_body?.substring(0, 100)}...`);
+
+          const extractedCode = tempMailService.extractVerificationCode(
+            result,
+            targetProfile.emailVerification?.codePattern
+          );
+
+          if (!extractedCode) {
+            console.error(`[TempMail] ✗ Failed to extract code from email`);
+            console.error(`[TempMail] Email subject: ${result.subject}`);
+            console.error(`[TempMail] Email text: ${result.text_body?.substring(0, 200)}`);
+            throw new Error(
+              `Failed to extract verification code from email: ${result.subject}`
+            );
+          }
+
+          code = extractedCode;
+          console.log(`[TempMail] ✓ Extracted verification code: ${code}`);
+        } catch (error) {
+          console.error(`[TempMail] ✗ Error waiting for email:`, error);
+          throw error;
+        }
+      } else {
+        console.log(`[TempMail] Using IMAP method (not temp mail)`);
+        code = await waitForEmailCode(flowStartedAt, targetProfile.emailVerification);
+      }
+
+      // 输入验证码
+      console.log(`[Flow] Filling verification code: ${code}`);
+      await humanDelay(800, 1500);
+      await humanType(activePage, targetProfile.selectors.emailCodeInput!, code);
+      console.log(`[Flow] ✓ Verification code filled`);
+
+      if (targetProfile.selectors.emailCodeSubmit) {
+        console.log(`[Flow] Clicking verification code submit button`);
+        await humanDelay(500, 1000);
+        await humanMouseMove(activePage);
+        await activePage.locator(targetProfile.selectors.emailCodeSubmit).click();
+        console.log(`[Flow] ✓ Submit button clicked`);
+      }
+
+      await targetProfile.afterEmailCodeFilled?.(activePage);
+
+      // 验证码提交后，再次检查是否需要输入密码
+      console.log(`[Flow] Waiting after verification code submission...`);
+      await humanDelay(2000, 3000);
+
+      const passwordAfterCode = await activePage
+        .locator(targetProfile.selectors.password ?? "input[type='password']")
+        .first()
+        .isVisible()
+        .catch(() => false);
+
+      if (passwordAfterCode) {
+        console.log('[Flow] Password input detected after email verification');
+        await humanDelay(500, 1000);
+        await humanType(activePage, targetProfile.selectors.password ?? "input[type='password']", requireEnv("TARGET_PASSWORD"));
+        passwordFilled = true;
+
+        await targetProfile.fillOptionalFields?.(activePage);
+        await humanDelay(500, 1200);
+        await humanMouseMove(activePage);
+        await activePage.locator(targetProfile.selectors.submit).click();
+        outcomeStage = "password_submitted";
+      } else {
+        outcomeStage = "email_verification_submitted";
+      }
+    } else if (!passwordFilled) {
+      // 检查是否出现密码输入框
+      console.log('[Flow] Checking for password input...');
       const passwordAppeared = await activePage
         .locator(targetProfile.selectors.password ?? "input[type='password']")
         .first()
@@ -277,6 +407,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         .catch(() => false);
 
       if (passwordAppeared) {
+        console.log('[Flow] Password input detected');
         await humanDelay(500, 1000);
         await humanType(activePage, targetProfile.selectors.password ?? "input[type='password']", requireEnv("TARGET_PASSWORD"));
         passwordFilled = true;
@@ -297,7 +428,10 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
     recordOutcome(summary, outcomeStage, outcome.kind, outcome.details, activePage);
     finalOutcomeKind = outcome.kind;
 
+    // 如果仍然需要验证码（通过 waitForKnownOutcome 检测到）
     if (outcome.kind === "email_code_requested") {
+      console.log('[Flow] Email verification code requested (detected by waitForKnownOutcome)');
+
       if (!targetProfile.emailVerification?.enabled) {
         throw new Error(
           "页面要求输入邮箱验证码，但 target.profile 中未启用 emailVerification。"
@@ -317,8 +451,9 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         const result = await tempMailService.waitForEmail(tempMailbox.id, {
           timeout: runtimeConfig.emailTimeoutMs,
           interval: runtimeConfig.emailPollIntervalMs,
+          emailAddress: tempMailbox.full_address,
+          useLatestApi: true,
           filter: (email) => {
-            // 根据 target.profile 配置过滤邮件
             if (targetProfile.emailVerification?.senderFilter) {
               return email.from.includes(targetProfile.emailVerification.senderFilter);
             }
@@ -346,11 +481,10 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
         code = extractedCode;
         console.log(`[TempMail] Extracted verification code: ${code}`);
       } else {
-        // 使用传统 IMAP 方式
         code = await waitForEmailCode(flowStartedAt, targetProfile.emailVerification);
       }
 
-      // 人类行为：缓慢输入验证码
+      // 输入验证码
       await humanDelay(800, 1500);
       await humanType(activePage, targetProfile.selectors.emailCodeInput, code);
 
@@ -365,6 +499,79 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
       recordOutcome(
         summary,
         "email_verification_submitted",
+        outcome.kind,
+        outcome.details,
+        activePage
+      );
+      finalOutcomeKind = outcome.kind;
+    }
+
+    // 检查是否需要填写全名和生日
+    await humanDelay(2000, 3000);
+
+    const fullNameVisible = targetProfile.selectors.fullName
+      ? await activePage
+          .locator(targetProfile.selectors.fullName)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      : false;
+
+    if (fullNameVisible) {
+      console.log('[Flow] Full name and birthday input detected');
+
+      // 填写全名
+      const fullName = `${userInfo.firstName} ${userInfo.lastName}`;
+      console.log(`[UserInfo] Filling full name: ${fullName}`);
+      await humanDelay(500, 1000);
+      await humanType(activePage, targetProfile.selectors.fullName!, fullName);
+
+      // 填写生日
+      if (targetProfile.selectors.birthdayYear &&
+          targetProfile.selectors.birthdayMonth &&
+          targetProfile.selectors.birthdayDay) {
+
+        console.log(`[UserInfo] Filling birthday: ${userInfo.birthday}`);
+        const [year, month, day] = userInfo.birthday.split('-');
+
+        // 填写年份
+        await humanDelay(500, 800);
+        const yearField = activePage.locator(targetProfile.selectors.birthdayYear).first();
+        await yearField.click();
+        await yearField.fill('');
+        await humanType(activePage, targetProfile.selectors.birthdayYear, year);
+
+        // 填写月份
+        await humanDelay(300, 600);
+        const monthField = activePage.locator(targetProfile.selectors.birthdayMonth).first();
+        await monthField.click();
+        await monthField.fill('');
+        await humanType(activePage, targetProfile.selectors.birthdayMonth, month);
+
+        // 填写日期
+        await humanDelay(300, 600);
+        const dayField = activePage.locator(targetProfile.selectors.birthdayDay).first();
+        await dayField.click();
+        await dayField.fill('');
+        await humanType(activePage, targetProfile.selectors.birthdayDay, day);
+      }
+
+      // 点击完成账户创建按钮
+      await humanDelay(1000, 2000);
+      await humanMouseMove(activePage);
+
+      if (targetProfile.selectors.completeAccountButton) {
+        await activePage.locator(targetProfile.selectors.completeAccountButton).click();
+      } else {
+        await activePage.locator(targetProfile.selectors.submit).click();
+      }
+
+      // 等待最终结果
+      await humanDelay(3000, 5000);
+      outcome = await waitForKnownOutcome(activePage, targetProfile.selectors, 30_000);
+      recordOutcome(
+        summary,
+        "after_manual_challenge",
         outcome.kind,
         outcome.details,
         activePage

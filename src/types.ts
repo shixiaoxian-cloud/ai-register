@@ -30,6 +30,11 @@ export interface TargetSelectors {
   deviceChallenge?: string;
   success?: string;
   blocked?: string;
+  fullName?: string;
+  birthdayYear?: string;
+  birthdayMonth?: string;
+  birthdayDay?: string;
+  completeAccountButton?: string;
 }
 
 export interface EmailVerificationConfig {
