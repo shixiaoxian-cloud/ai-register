@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { MetricCard } from "../components/MetricCard";
@@ -12,6 +12,8 @@ import type { OverviewData } from "../lib/types";
 export function OverviewPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,25 +40,73 @@ export function OverviewPage() {
     };
   }, []);
 
+  const recentRuns = overview?.recentRuns || [];
+  const visibleRuns = recentRuns.filter((run) => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return [
+      run.planName,
+      run.siteName,
+      run.status,
+      run.latestStage?.stageLabel,
+      run.summary,
+      run.conclusion?.summary
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+
   return (
     <div className="workspace-stack">
       <WorkspaceHeader
-        eyebrow="总览"
+        eyebrow="仪表盘"
         title="自动化测试平台控制台"
-        description="从单次运行工具页升级为资源中心型后台，把站点、方案、运行和产物收进同一张控制台画布。"
+        description="参考后台管理台的信息架构，把品牌区、导航、顶栏、工具栏和数据卡片压进同一张浅色工作画布。"
         actions={
           <>
             <Link to="/config" className="accent-button">
               进入配置中心
             </Link>
             <Link to="/runs" className="ghost-button">
-              打开运行中心
+              查看运行监控
             </Link>
           </>
         }
       />
 
       {message ? <div className="banner banner-danger">{message}</div> : null}
+
+      <section className="console-toolbar">
+        <label className="console-search">
+          <span className="console-search__icon" aria-hidden="true" />
+          <input
+            aria-label="搜索最近运行"
+            placeholder="搜索站点 / 方案 / 状态 / 阶段"
+            value={search}
+            onChange={(event) =>
+              startTransition(() => {
+                setSearch(event.target.value);
+              })
+            }
+          />
+        </label>
+        <div className="toolbar-row">
+          <Link to="/artifacts" className="ghost-button">
+            产物中心
+          </Link>
+          <a href="/report" target="_blank" rel="noreferrer" className="ghost-button">
+            最新报告
+          </a>
+          <Link to="/config" className="accent-button">
+            新建资源
+          </Link>
+        </div>
+      </section>
 
       <div className="metrics-grid">
         <MetricCard
@@ -136,35 +186,60 @@ export function OverviewPage() {
 
       <SectionCard
         title="最近运行"
-        subtitle="不是只看最后一次是否成功，而是看最近几次运行是否在不同阶段出现可比较的差异。"
+        subtitle="把执行记录整理成后台列表视图，在同一块卡片里比较方案、站点、阶段、状态和结论。"
         actions={<Link to="/runs" className="ghost-button">查看全部运行</Link>}
       >
-        <div className="run-list">
-          {overview?.recentRuns.length ? (
-            overview.recentRuns.map((run) => (
-              <article key={run.id} className="run-row">
-                <div>
-                  <StatusPill tone={toneForStatus(run.status)}>
-                    {formatRunStatus(run.status)}
-                  </StatusPill>
-                  <strong>{run.planName}</strong>
-                  <p>
-                    {run.siteName} · {formatDateTime(run.startedAt)}
-                  </p>
-                </div>
-                <div>
-                  <span className="run-row__label">最新阶段</span>
-                  <p>{run.latestStage?.stageLabel || "尚无阶段信息"}</p>
-                </div>
-                <div>
-                  <span className="run-row__label">结论</span>
-                  <p>{run.conclusion?.summary || run.summary}</p>
-                </div>
-              </article>
-            ))
-          ) : (
-            <p className="empty-copy">还没有运行记录，先去运行中心发起一次验证任务。</p>
-          )}
+        <div className="table-panel">
+          <div className="table-panel__header table-panel__header--runs">
+            <span>方案 / 站点</span>
+            <span>阶段</span>
+            <span>状态</span>
+            <span>更新时间</span>
+            <span>结论</span>
+          </div>
+
+          <div className="table-panel__body">
+            {visibleRuns.length ? (
+              visibleRuns.map((run) => (
+                <article key={run.id} className="table-row table-row--runs">
+                  <div className="table-row__primary">
+                    <strong>{run.planName}</strong>
+                    <p>
+                      {run.siteName} · {formatDateTime(run.startedAt)}
+                    </p>
+                  </div>
+                  <div className="table-row__secondary">
+                    <span className="run-row__label">最新阶段</span>
+                    <p>{run.latestStage?.stageLabel || "尚无阶段信息"}</p>
+                  </div>
+                  <div className="table-row__status">
+                    <StatusPill tone={toneForStatus(run.status)}>
+                      {formatRunStatus(run.status)}
+                    </StatusPill>
+                  </div>
+                  <div className="table-row__secondary">
+                    <span className="run-row__label">最近时间</span>
+                    <p>{formatDateTime(run.finishedAt || run.startedAt)}</p>
+                  </div>
+                  <div className="table-row__secondary">
+                    <span className="run-row__label">运行结论</span>
+                    <p>{run.conclusion?.summary || run.summary}</p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="empty-copy">当前条件下没有找到运行记录。</p>
+            )}
+          </div>
+
+          <div className="table-panel__footer">
+            <span>
+              显示 1 至 {visibleRuns.length} 共 {recentRuns.length} 条记录
+            </span>
+            <Link to="/runs" className="ghost-button">
+              打开运行中心
+            </Link>
+          </div>
         </div>
       </SectionCard>
 
@@ -181,12 +256,12 @@ export function OverviewPage() {
           <div className="operator-step">
             <span>02</span>
             <strong>发起运行并盯阶段</strong>
-            <p>在运行中心选择方案，观察阶段推进、人工介入提示和关键日志。</p>
+            <p>在运行监控里观察阶段推进、人工介入提示和关键日志。</p>
           </div>
           <div className="operator-step">
             <span>03</span>
             <strong>沉淀结果产物</strong>
-            <p>在结果产物页按运行追踪报告、Trace、媒体和 Token 输出。</p>
+            <p>在产物中心按运行追踪报告、Trace、媒体和 Token 输出。</p>
           </div>
         </div>
       </SectionCard>

@@ -183,6 +183,29 @@ async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
 
   // 尝试多次跳过，因为可能有多个引导页
   for (let attempt = 1; attempt <= 6; attempt++) {
+    // 首先检查是否有工作账号选择页面
+    const personalAccountLink = page.locator('a:has-text("Start a personal account")').first();
+    const personalAccountVisible = await personalAccountLink.isVisible().catch(() => false);
+
+    if (personalAccountVisible) {
+      console.log('[Flow] Work account selection page detected, clicking "Start a personal account"');
+      await humanDelay(500, 1000);
+      await humanMouseMove(page);
+
+      try {
+        await personalAccountLink.click({ timeout: 5000 });
+      } catch (error) {
+        console.log('[Flow] Regular click failed, trying force click...');
+        await personalAccountLink.click({ force: true });
+      }
+
+      await humanDelay(2000, 3000);
+      console.log('[Flow] Personal account link clicked, waiting for the next page');
+      skippedAny = true;
+      continue;
+    }
+
+    // 然后检查常规的 Skip 按钮
     const skipButton = page.locator(postRegistrationSkipSelector).first();
     const skipVisible = await skipButton.isVisible().catch(() => false);
 
