@@ -108,9 +108,14 @@ export function buildSub2ApiPayload(
 ): Sub2ApiPayload | null {
   const { accessToken, refreshToken, idToken, email, password } = tokenData;
 
-  if (!refreshToken) {
-    console.warn('Sub2Api 格式需要 refresh_token');
+  if (!accessToken) {
+    console.warn('Sub2Api 格式需要 access_token');
     return null;
+  }
+
+  // 即使没有 refresh_token 也生成 Sub2Api 格式（字段为空）
+  if (!refreshToken) {
+    console.warn('Sub2Api: refresh_token 为空，但仍然生成格式');
   }
 
   const authInfo = extractAuthInfo(accessToken);
@@ -281,7 +286,8 @@ export async function saveTokenToMultipleFormats(
   const sub2apiDir = path.join(baseOutputDir, 'sub2api');
 
   const cpaPath = await saveTokenToFile(tokenData, cpaDir, 'cpa');
-  const sub2apiPath = tokenData.refreshToken
+  // 只要有 access_token 就保存 Sub2Api 格式
+  const sub2apiPath = tokenData.accessToken
     ? await saveTokenToFile(tokenData, sub2apiDir, 'sub2api')
     : null;
 

@@ -545,7 +545,7 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
 
         await humanDelay(300, 600);
         const ageField = activePage.locator('input[placeholder="Age"], input[aria-label="Age"]').first();
-        await ageField.click();
+        // 直接填写，不需要先点击（避免被 label 遮挡）
         await ageField.fill(age.toString());
         console.log(`[UserInfo] Age filled: ${age}`);
       } else if (targetProfile.selectors.birthdayYear &&
@@ -655,36 +655,129 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
 
     expect(targetProfile.expectedOutcomes).toContain(finalOutcomeKind ?? "unknown");
 
-    // 如果注册成功，尝试提取并保存 token
-    if (finalOutcomeKind === "success") {
-      console.log('[Token] Registration successful, attempting to extract tokens...');
+    // 如果注册成功或到达 ChatGPT 主页，尝试提取并保存 token
+    const shouldExtractTokens = finalOutcomeKind === "success" ||
+                                (finalOutcomeKind === "unknown" && activePage.url().includes("chatgpt.com"));
+
+    if (shouldExtractTokens) {
+      console.log('[Token] Registration completed, attempting to extract tokens...');
 
       try {
         // 等待页面稳定
         await humanDelay(2000, 3000);
 
-        // 尝试从页面中提取 token（通过 localStorage 或 cookies）
-        const tokens = await activePage.evaluate(() => {
-          // 尝试从 localStorage 获取
-          const accessToken = localStorage.getItem('accessToken') ||
+        // 尝试从 cookies 中提取 session token
+        const cookies = await activePage.context().cookies();
+        console.log(`[Token] Found ${cookies.length} cookies`);
+
+        let sessionToken = '';
+        let csrfToken = '';
+        for (const cookie of cookies) {
+          if (cookie.name === '__Secure-next-auth.session-token' || cookie.name === 'next-auth.session-token') {
+            console.log(`[Token] Found session token: ${cookie.name}`);
+            sessionToken = cookie.value;
+          }
+          if (cookie.name.includes('csrf-token')) {
+            csrfToken = cookie.value;
+          }
+        }
+
+        console.log(`[Token] Session token found: ${!!sessionToken}`);
+        console.log(`[Token] CSRF token found: ${!!csrfToken}`);
+
+        // 先初始化 tokens 对象
+        let tokens = {
+          accessToken: '',
+          refreshToken: '',
+          idToken: ''
+        };
+
+        // 如果有 session token，尝试通过 API 获取 access token
+        if (sessionToken) {
+          try {
+            console.log('[Token] Attempting to fetch access token via API...');
+            const response = await activePage.evaluate(async () => {
+              try {
+                const res = await fetch('https://chatgpt.com/api/auth/session', {
+                  method: 'GET',
+                  credentials: 'include'
+                });
+                if (res.ok) {
+                  return await res.json();
+                }
+                return null;
+              } catch (e) {
+                return null;
+              }
+            });
+
+            if (response && response.accessToken) {
+              console.log('[Token] ✓ Successfully fetched access token from API');
+              tokens.accessToken = response.accessToken;
+              tokens.refreshToken = response.refreshToken || '';
+              tokens.idToken = response.idToken || '';
+            }
+          } catch (error) {
+            console.log('[Token] Failed to fetch access token from API:', error);
+          }
+        }
+
+        // 如果还没有 token，尝试从页面中提取
+        if (!tokens.accessToken) {
+          const pageTokens = await activePage.evaluate(() => {
+            // 方法 1: 从 localStorage 获取
+            let accessToken = localStorage.getItem('accessToken') ||
                              localStorage.getItem('access_token') || '';
-          const refreshToken = localStorage.getItem('refreshToken') ||
+            let refreshToken = localStorage.getItem('refreshToken') ||
                               localStorage.getItem('refresh_token') || '';
-          const idToken = localStorage.getItem('idToken') ||
+            let idToken = localStorage.getItem('idToken') ||
                          localStorage.getItem('id_token') || '';
 
-          return {
-            accessToken: accessToken,
-            refreshToken: refreshToken,
-            idToken: idToken
-          };
-        });
+            // 方法 2: 从 cookies 获取
+            if (!accessToken) {
+              const cookies = document.cookie.split(';');
+              for (const cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === '__Secure-next-auth.session-token' || name === 'next-auth.session-token') {
+                  accessToken = decodeURIComponent(value);
+                }
+              }
+            }
+
+            // 方法 3: 从 __NEXT_DATA__ 获取
+            if (!accessToken) {
+              try {
+                const nextData = document.getElementById('__NEXT_DATA__');
+                if (nextData) {
+                  const data = JSON.parse(nextData.textContent || '{}');
+                  const props = data?.props?.pageProps;
+                  if (props?.accessToken) accessToken = props.accessToken;
+                  if (props?.refreshToken) refreshToken = props.refreshToken;
+                  if (props?.idToken) idToken = props.idToken;
+                }
+              } catch (e) {
+                // Ignore parsing errors
+              }
+            }
+
+            return {
+              accessToken: accessToken,
+              refreshToken: refreshToken,
+              idToken: idToken
+            };
+          });
+
+          // 合并 pageTokens 到 tokens
+          if (pageTokens.accessToken) {
+            tokens = pageTokens;
+          }
+        }
 
         if (tokens.accessToken) {
           console.log('[Token] ✓ Access token found');
 
           const tokenData: TokenData = {
-            email: requireEnv("TARGET_EMAIL"),
+            email: tempMailbox?.full_address || requireEnv("TARGET_EMAIL"),
             password: userInfo.password,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
@@ -713,8 +806,23 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
             }, null, 2), "utf8"),
             contentType: "application/json"
           });
+        } else if (sessionToken) {
+          console.log('[Token] ✓ Session token found in cookies');
+          console.log(`[Token] Session token: ${sessionToken.substring(0, 20)}...`);
+
+          // 保存 session token 信息
+          await testInfo.attach("session-info.json", {
+            body: Buffer.from(JSON.stringify({
+              email: tempMailbox?.full_address || requireEnv("TARGET_EMAIL"),
+              password: userInfo.password,
+              sessionToken: sessionToken,
+              note: "Session token found in cookies - may need to exchange for access token"
+            }, null, 2), "utf8"),
+            contentType: "application/json"
+          });
         } else {
           console.log('[Token] ⚠ No access token found in page storage');
+          console.log('[Token] ℹ This may be normal - ChatGPT uses session-based auth');
         }
       } catch (error) {
         console.error('[Token] Failed to extract or save tokens:', error);
