@@ -2,6 +2,11 @@
 
 本目录包含项目的所有技术文档，按类别组织。
 
+## 核心文档
+
+- [项目架构说明](ARCHITECTURE.md) - 系统架构、模块设计、数据流
+- [文档贡献指南](CONTRIBUTING.md) - 如何编写和组织文档
+
 ## 目录结构
 
 - **guides/** - 使用指南和配置说明
@@ -55,3 +60,29 @@
 - [专家最终解决方案](analysis/expert-solution-final.md)
 - [顶级解决方案](analysis/top-tier-solution.md)
 - [测试分析报告](analysis/test-report.md)
+
+## 快速导航
+
+### 新手入门
+1. 阅读 [README.md](../README.md) 了解项目概况
+2. 查看 [ARCHITECTURE.md](ARCHITECTURE.md) 理解系统架构
+3. 参考 [Chrome 设置指南](guides/chrome-setup.md) 配置环境
+4. 遇到问题查看 [常见问题](troubleshooting/general.md)
+
+### 开发者
+1. 阅读 [ARCHITECTURE.md](ARCHITECTURE.md) 了解架构设计
+2. 查看 [实现总结](implementation/) 了解功能实现
+3. 参考 [CONTRIBUTING.md](CONTRIBUTING.md) 贡献文档
+
+### 问题排查
+1. 先查看 [常见问题](troubleshooting/general.md)
+2. 针对性查看具体问题的故障排除文档
+3. 使用 [调试工具指南](guides/debug-tools.md) 进行深度调试
+
+## 文档统计
+
+- 使用指南：8 篇
+- 故障排除：9 篇
+- 实现总结：12 篇
+- 技术分析：8 篇
+- **总计：37 篇技术文档**
