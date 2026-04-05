@@ -74,13 +74,6 @@ export function AppShell() {
             </button>
             <span className="topbar__chip">CN ZH</span>
             <span className="topbar__chip topbar__chip--accent">SQLite 已连接</span>
-            <div className="topbar__profile">
-              <span className="topbar__avatar">OP</span>
-              <span className="topbar__profile-copy">
-                <strong>operator</strong>
-                <small>Admin</small>
-              </span>
-            </div>
           </div>
         </header>
 

@@ -145,8 +145,7 @@ button:disabled {
 .table-row__primary strong,
 .table-row__secondary strong,
 .operator-step strong,
-.topbar__kicker,
-.topbar__profile-copy strong {
+.topbar__kicker {
   font-family: var(--font-display);
 }
 
@@ -480,46 +479,6 @@ button:disabled {
   color: var(--accent-strong);
   background: rgba(var(--accent-rgb), 0.12);
   border-color: rgba(var(--accent-rgb), 0.18);
-}
-
-.topbar__profile {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 4px 6px 4px 4px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: var(--shadow-soft);
-}
-
-.topbar__avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-}
-
-.topbar__profile-copy {
-  display: grid;
-  gap: 2px;
-  padding-right: 6px;
-}
-
-.topbar__profile-copy strong {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.topbar__profile-copy small {
-  color: var(--surface-muted);
-  font-size: 12px;
 }
 
 .main-content {
