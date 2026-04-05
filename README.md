@@ -2,13 +2,25 @@
 
 这个项目是一个安全边界明确的浏览器测试骨架，用来验证已获授权目标站点的保护流程是否触发、是否拦截、以及在人工完成保护步骤后能否继续。
 
+## 新功能：Token 自动保存 ✨
+
+注册成功后，自动提取并保存 token 到本地：
+- **CPA 格式**：适用于 CPA/CLI 管理接口
+- **Sub2Api 格式**：适用于 Sub2Api 账号管理系统
+
+详见：[Token 提取与保存指南](docs/guides/token-extraction.md)
+
+## 核心功能
+
 它支持：
 
 - Playwright 浏览器自动化
 - 真实邮箱 IMAP 轮询并提取验证码
+- 临时邮箱 API 集成（推荐用于自动化）
 - 检测 `CAPTCHA`、短信挑战、设备安全挑战、阻断页
 - 保护出现后直接结束，或人工完成后继续执行
 - 截图、trace、录像、HTML 报告
+- **Token 自动提取与保存**（新增）
 
 它不提供：
 
@@ -30,8 +42,23 @@ npm run pw:install
 2. 运行 `npm run config:ui`
 3. 在浏览器打开 `http://127.0.0.1:3200`
 4. 通过中文配置页保存一个完整的 `https://` 测试站点地址
-5. 在前端直接选择运行模式并点击“开始测试”
+5. 在前端直接选择运行模式并点击”开始测试”
 6. 在 [src/target.profile.ts](/e:/shichenwei/ai-register/src/target.profile.ts) 中补充字段选择器和期望结果
+
+### Token 保存配置（可选）
+
+如果需要保存注册成功后的 token，在 `.env` 中配置：
+
+```bash
+# Token 输出目录
+TOKEN_OUTPUT_DIR=./output_tokens
+```
+
+注册成功后，token 会自动保存到：
+- `output_tokens/cpa/` - CPA 格式
+- `output_tokens/sub2api/` - Sub2Api 格式
+
+详见：[Token 提取与保存指南](docs/guides/token-extraction.md)
 
 默认已按中文环境运行：
 

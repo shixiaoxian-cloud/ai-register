@@ -24,6 +24,8 @@ import type { FlowStage, OutcomeKind, OutcomeRecord } from "../src/types";
 import type { Page } from "@playwright/test";
 import { generateUserRegistrationInfo } from "../src/utils/user-info-generator";
 import { generateEmailLocalPart } from "../src/utils/email-generator";
+import { saveTokenToMultipleFormats } from "../src/utils/token-saver";
+import type { TokenData } from "../src/utils/token-saver";
 
 async function attachSummary(
   records: OutcomeRecord[],
@@ -607,6 +609,72 @@ test("验证已授权目标站点的保护流程", async ({ page, context }, tes
     }
 
     expect(targetProfile.expectedOutcomes).toContain(finalOutcomeKind ?? "unknown");
+
+    // 如果注册成功，尝试提取并保存 token
+    if (finalOutcomeKind === "success") {
+      console.log('[Token] Registration successful, attempting to extract tokens...');
+
+      try {
+        // 等待页面稳定
+        await humanDelay(2000, 3000);
+
+        // 尝试从页面中提取 token（通过 localStorage 或 cookies）
+        const tokens = await activePage.evaluate(() => {
+          // 尝试从 localStorage 获取
+          const accessToken = localStorage.getItem('accessToken') ||
+                             localStorage.getItem('access_token') || '';
+          const refreshToken = localStorage.getItem('refreshToken') ||
+                              localStorage.getItem('refresh_token') || '';
+          const idToken = localStorage.getItem('idToken') ||
+                         localStorage.getItem('id_token') || '';
+
+          return {
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            idToken: idToken
+          };
+        });
+
+        if (tokens.accessToken) {
+          console.log('[Token] ✓ Access token found');
+
+          const tokenData: TokenData = {
+            email: requireEnv("TARGET_EMAIL"),
+            password: userInfo.password,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            idToken: tokens.idToken
+          };
+
+          // 保存到本地文件（CPA 和 Sub2Api 格式）
+          const outputDir = process.env.TOKEN_OUTPUT_DIR || './output_tokens';
+          const savedPaths = await saveTokenToMultipleFormats(tokenData, outputDir);
+
+          if (savedPaths.cpa) {
+            console.log(`[Token] ✓ CPA format saved: ${savedPaths.cpa}`);
+          }
+          if (savedPaths.sub2api) {
+            console.log(`[Token] ✓ Sub2Api format saved: ${savedPaths.sub2api}`);
+          }
+
+          // 附加 token 信息到测试报告
+          await testInfo.attach("tokens.json", {
+            body: Buffer.from(JSON.stringify({
+              email: tokenData.email,
+              hasAccessToken: !!tokenData.accessToken,
+              hasRefreshToken: !!tokenData.refreshToken,
+              hasIdToken: !!tokenData.idToken,
+              savedPaths: savedPaths
+            }, null, 2), "utf8"),
+            contentType: "application/json"
+          });
+        } else {
+          console.log('[Token] ⚠ No access token found in page storage');
+        }
+      } catch (error) {
+        console.error('[Token] Failed to extract or save tokens:', error);
+      }
+    }
   } finally {
     await attachSummary(summary, testInfo);
 
