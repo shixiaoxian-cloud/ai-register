@@ -183,12 +183,31 @@ async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
 
   // 尝试多次跳过，因为可能有多个引导页
   for (let attempt = 1; attempt <= 6; attempt++) {
-    // 首先检查是否有工作账号选择页面
-    const personalAccountLink = page.locator('a:has-text("Start a personal account")').first();
-    const personalAccountVisible = await personalAccountLink.isVisible().catch(() => false);
+    // 首先检查是否有工作账号选择页面（多种选择器）
+    const personalAccountSelectors = [
+      'a:has-text("Start a personal account")',
+      'a:has-text("start a personal account")',
+      'a[href*="personal"]',
+      'button:has-text("For my own work tasks")',
+      'button[value="personal"]'
+    ];
 
-    if (personalAccountVisible) {
-      console.log('[Flow] Work account selection page detected, clicking "Start a personal account"');
+    let personalAccountLink = null;
+    let personalAccountVisible = false;
+
+    for (const selector of personalAccountSelectors) {
+      const link = page.locator(selector).first();
+      const visible = await link.isVisible().catch(() => false);
+      if (visible) {
+        personalAccountLink = link;
+        personalAccountVisible = true;
+        console.log(`[Flow] Found personal account selector: ${selector}`);
+        break;
+      }
+    }
+
+    if (personalAccountVisible && personalAccountLink) {
+      console.log('[Flow] Work account selection page detected, clicking personal account option');
       await humanDelay(500, 1000);
       await humanMouseMove(page);
 
@@ -200,7 +219,7 @@ async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
       }
 
       await humanDelay(2000, 3000);
-      console.log('[Flow] Personal account link clicked, waiting for the next page');
+      console.log('[Flow] Personal account option clicked, waiting for the next page');
       skippedAny = true;
       continue;
     }

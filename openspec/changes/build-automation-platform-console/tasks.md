@@ -1,8 +1,8 @@
 ## 1. Frontend Foundation
 
-- [ ] 1.1 Create the React 18 + TypeScript + Vite console workspace and add npm scripts for local development and production build (`platform-console-shell`).
-- [ ] 1.2 Implement the shared application shell, primary routing, and typed API client for `Overview`, `Config Center`, `Runs`, `Artifacts`, and `System` (`platform-console-shell`).
-- [ ] 1.3 Establish shared design tokens, status cards, navigation, and layout primitives that replace the legacy standalone page chrome (`platform-console-shell`).
+- [x] 1.1 Create the React 18 + TypeScript + Vite console workspace and add npm scripts for local development and production build (`platform-console-shell`).
+- [x] 1.2 Implement the shared application shell, primary routing, and typed API client for `Overview`, `Config Center`, `Runs`, `Artifacts`, and `System` (`platform-console-shell`).
+- [x] 1.3 Establish shared design tokens, status cards, navigation, and layout primitives that replace the legacy standalone page chrome (`platform-console-shell`).
 
 ## 2. SQLite Platform Persistence
 
