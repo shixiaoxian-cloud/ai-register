@@ -72,11 +72,10 @@ export function OverviewPage() {
             <Link to="/config" className="accent-button">
               进入配置中心
             </Link>
-            <Link to="/runs" className="ghost-button">
-              查看运行监控
+            <Link to="/tasks" className="ghost-button">
+              查看任务中心
             </Link>
-          </>
-        }
+          </>        }
       />
 
       {message ? <div className="banner banner-danger">{message}</div> : null}
@@ -187,7 +186,7 @@ export function OverviewPage() {
       <SectionCard
         title="最近运行"
         subtitle="把执行记录整理成后台列表视图，在同一块卡片里比较方案、站点、阶段、状态和结论。"
-        actions={<Link to="/runs" className="ghost-button">查看全部运行</Link>}
+        actions={<Link to="/tasks" className="ghost-button">查看全部任务</Link>}
       >
         <div className="table-panel">
           <div className="table-panel__header table-panel__header--runs">
@@ -236,8 +235,8 @@ export function OverviewPage() {
             <span>
               显示 1 至 {visibleRuns.length} 共 {recentRuns.length} 条记录
             </span>
-            <Link to="/runs" className="ghost-button">
-              打开运行中心
+            <Link to="/tasks" className="ghost-button">
+              打开任务中心
             </Link>
           </div>
         </div>
@@ -255,8 +254,8 @@ export function OverviewPage() {
           </div>
           <div className="operator-step">
             <span>02</span>
-            <strong>发起运行并盯阶段</strong>
-            <p>在运行监控里观察阶段推进、人工介入提示和关键日志。</p>
+            <strong>发起任务并盯进度</strong>
+            <p>在任务中心观察每次执行的进度、人工介入提示和关键日志。</p>
           </div>
           <div className="operator-step">
             <span>03</span>

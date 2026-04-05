@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 const navItems = [
   { to: "/", label: "仪表盘", meta: "平台概览与健康", icon: "overview" },
   { to: "/config", label: "配置中心", meta: "站点、方案与画像", icon: "config" },
-  { to: "/runs", label: "运行监控", meta: "执行、日志与介入", icon: "runs" },
+  { to: "/tasks", label: "任务中心", meta: "执行、进度与产物", icon: "runs" },
   { to: "/artifacts", label: "产物中心", meta: "报告、Trace 与令牌", icon: "artifacts" },
   { to: "/system", label: "系统设置", meta: "偏好、入口与说明", icon: "system" }
 ];

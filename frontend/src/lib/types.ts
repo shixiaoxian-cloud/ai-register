@@ -160,27 +160,59 @@ export interface RunRecord {
 export interface TaskRecord {
   id: string;
   name: string;
-  status: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'stopped';
   sourceKind: string;
   sourceRef: string;
+  planId: string;
+  planName: string;
+  siteName: string;
+  runMode: RunMode;
+  totalCases: number;
+  completedCases: number;
+  successCases: number;
+  failedCases: number;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
   caseCount?: number;
   runCount?: number;
   artifactCount?: number;
+  cases?: CaseRecord[];
+  artifacts?: ArtifactSummary;
+}
+
+export interface ArtifactSummary {
+  token: number;
+  report: number;
+  screenshot: number;
+  trace: number;
+  other: number;
 }
 
 export interface CaseRecord {
   id: string;
   taskId: string;
   name: string;
-  status: string;
+  sequence: number;
+  status: 'pending' | 'running' | 'retrying' | 'success' | 'failed';
   sourceKind: string;
   sourceRef: string;
+  startedAt?: string;
+  finishedAt?: string;
+  retryCount: number;
+  maxRetries: number;
+  exitCode?: number;
+  errorType?: 'timeout' | 'protection' | 'network' | 'unknown';
+  errorMessage?: string;
+  errorStack?: string;
   createdAt: string;
   updatedAt: string;
   runCount?: number;
   artifactCount?: number;
+  runs?: RunRecord[];
+  artifacts?: ArtifactEntry[];
+  latestStage?: RunStageSnapshot;
 }
 
 export interface OverviewData {
