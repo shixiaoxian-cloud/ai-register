@@ -1,0 +1,26 @@
+{
+  "name": "authorized-protection-validation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright harness for validating authorized third-party protection journeys without bypassing them.",
+  "scripts": {
+    "config:ui": "node ./scripts/config-server.mjs",
+    "pw:install": "playwright install chromium",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^24.6.0",
+    "@types/node-fetch": "^2.6.13",
+    "dotenv": "^17.2.2",
+    "imapflow": "^1.0.191",
+    "mailparser": "^3.7.4",
+    "node-fetch": "^2.7.0",
+    "typescript": "^5.9.2"
+  }
+}

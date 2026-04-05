@@ -1,0 +1,61 @@
+
+> authorized-protection-validation@0.1.0 test
+> playwright test
+
+
+Running 1 test using 1 worker
+
+[UserInfo] Generated user info: { firstName: [32m'Sarah'[39m, lastName: [32m'Williams'[39m, birthday: [32m'2005-10-18'[39m }
+[TempMail] Created temporary email: fq3azkfn08@hhxxttxx.us.ci
+[Cloudflare] Visiting homepage first: https://chatgpt.com
+[Cloudflare] cf_clearance: ✓ Found
+[Cloudflare] __cf_bm: ✓ Found
+[Navigation] Going to target URL: https://chatgpt.com/auth/login
+[Navigation] Waiting for page to be fully loaded...
+[TempMail] Keeping temporary mailbox: fq3azkfn08@hhxxttxx.us.ci
+[TempMail] Mailbox ID: ab3baee3-cf1e-4bd3-a05e-d4563af00ff4
+  x  1 tests\protection-validation.spec.ts:94:5 › 验证已授权目标站点的保护流程 (40.7s)
+
+
+  1) tests\protection-validation.spec.ts:94:5 › 验证已授权目标站点的保护流程 ─────────────────────────────────────
+
+    TimeoutError: page.waitForLoadState: Timeout 30000ms exceeded.
+    =========================== logs ===========================
+      "load" event fired
+      "commit" event fired
+      "domcontentloaded" event fired
+      "load" event fired
+      "commit" event fired
+      "domcontentloaded" event fired
+      "load" event fired
+    ============================================================
+
+      206 |     // 等待页面完全加载
+      207 |     console.log(`[Navigation] Waiting for page to be fully loaded...`);
+    > 208 |     await page.waitForLoadState("networkidle", { timeout: 30000 });
+          |                ^
+      209 |
+      210 |     // 人类行为：页面加载后随机移动鼠标
+      211 |     await humanDelay(1000, 2000);
+        at E:\shichenwei\ai-register\tests\protection-validation.spec.ts:208:16
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\protection-validation-验证已授权目标站点的保护流程\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\protection-validation-验证已授权目标站点的保护流程\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\protection-validation-验证已授权目标站点的保护流程\error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\protection-validation-验证已授权目标站点的保护流程\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\protection-validation-验证已授权目标站点的保护流程\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests\protection-validation.spec.ts:94:5 › 验证已授权目标站点的保护流程 ──────────────────────────────────────
