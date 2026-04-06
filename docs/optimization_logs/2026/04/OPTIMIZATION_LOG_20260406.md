@@ -172,3 +172,83 @@
 
 - 如需彻底清空 `npm run typecheck` 阻塞，下一轮需要单独治理 `src/stealth/*.ts` 与相关测试 helper 的类型历史债。
 - 如需进一步收口资源管理体验，可考虑在兼容页 `/tasks` 与主工作区 `/runs` 之间做更明确的职责合并或下线决策。
+
+## 平台控制台整站重设计补记
+
+### 本轮变更
+
+- 按“统一台账式后台”方案重做新版平台控制台的整体信息架构与视觉层，让各工作区统一为“标题区 + 工具栏 + 标准列表/表格 + 详情区”的后台骨架。
+- 重构 `frontend/src/styles.css`，移除原先偏卡片化、局部展示型的样式组织，建立统一的列表、操作列、详情区、设置区和日志区样式基线。
+- 新增 `frontend/src/components/ActionIconButton.tsx`，统一查看、修改、删除、打开、下载等图标按钮，避免各页面各自拼接操作入口。
+- 重做 `Overview`、`Config Center`、`Task Center`、`Runs`、`Artifacts`、`System` 六个主页面，使信息展示统一收敛为列表/表格主视图。
+- 调整 `frontend/src/components/AppShell.tsx` 一级导航，明确区分 `任务中心` 与 `运行流水`，避免旧版 `/tasks` 与 `/runs` 的入口语义混杂。
+- 在配置中心保持现有资源 CRUD 能力的前提下，将 `站点 / 方案 / 画像 / 邮箱` 全部切换为统一资源台账，并保留右侧查看/编辑详情区。
+
+### 已核对文件
+
+- `frontend/src/components/ActionIconButton.tsx`
+- `frontend/src/components/AppShell.tsx`
+- `frontend/src/pages/OverviewPage.tsx`
+- `frontend/src/pages/ConfigCenterPage.tsx`
+- `frontend/src/pages/TaskCenterPage.tsx`
+- `frontend/src/pages/RunsPage.tsx`
+- `frontend/src/pages/ArtifactsPage.tsx`
+- `frontend/src/pages/SystemPage.tsx`
+- `frontend/src/styles.css`
+
+### 已执行测试
+
+- `npm run console:typecheck`：通过。
+- `npm run console:build`：通过。
+
+### 未执行测试
+
+- `npm run typecheck`：本轮只验证新版前端控制台构建链路，未重新执行根级 TypeScript 检查。
+- `npm test`：本轮未触达 Playwright 主流程实现，未执行完整回归。
+
+### 一致性检查
+
+- 本轮为 8 个前端文件的大范围重构，已完成一次跨页面一致性检查，确认总览、配置、任务、运行、产物、系统六个工作区的结构口径已经统一。
+- 已确认构建产物成功输出到 `dist/platform-console/`，说明共享壳层、路由与样式基线在生产打包路径下可用。
+
+### 阻塞原因
+
+- 无新增阻塞。
+
+### 后续动作
+
+- 如需进一步提升列表交互，可在下一轮补充批量操作、列显隐、固定表头和表格级筛选能力。
+- 如需进一步降低 `/tasks` 与 `/runs` 的认知成本，可在下一轮继续收口两者的职责边界与跳转关系。
+
+## 生日 Listbox 适配补记
+
+### 本轮变更
+
+- 在 `tests/scenarios/account-details/account-helpers.ts` 中为生日检测补充 `react-aria` 风格的 `button[aria-haspopup="listbox"]` 方案识别。
+- 在同一文件中为生日填写增加双通道处理：保留原有 `spinbutton/input` 直填逻辑，同时新增月/日/年三段式下拉选择逻辑。
+- 新增月份选项兼容，支持英文缩写月份、英文全称月份以及数字月份匹配。
+
+### 已核对文件
+
+- `tests/scenarios/account-details/account-helpers.ts`
+
+### 已执行测试
+
+- `npm run typecheck`：失败；仍被仓库既有 `src/stealth/*.ts`、`tests/scenarios/email-verification/email-helpers.ts`、`tests/scenarios/token-extraction/token-helpers.ts` 的历史类型错误阻塞，未出现本轮生日适配文件相关报错。
+- `node -e "require('typescript').transpileModule(...)"`：通过，已单独验证 `tests/scenarios/account-details/account-helpers.ts` 可完成 TypeScript 转译。
+
+### 未执行测试
+
+- `npm test`：本轮触达的是注册后账户资料填写辅助逻辑，完整回归依赖外部目标站点、邮箱链路与人工挑战处理，当前未在本地重复执行整套 Playwright 流程。
+
+### 一致性检查
+
+- 已完成生日控件兼容路径复核，确认旧版可输入生日控件和新版 `listbox` 弹层日期控件共存时，优先级与检测口径保持一致。
+
+### 阻塞原因
+
+- 根级 TypeScript 校验仍被仓库现存历史类型问题阻塞，暂时无法用 `npm run typecheck` 给出全绿回执。
+
+### 后续动作
+
+- 若后续拿到该日期弹层的完整 DOM，可继续把当前基于按钮顺序的月/日/年定位收敛到更强的标签语义定位。

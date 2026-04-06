@@ -1,11 +1,16 @@
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import { ActionIconButton } from "../components/ActionIconButton";
 import { SectionCard } from "../components/SectionCard";
 import { StatusPill } from "../components/StatusPill";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { api } from "../lib/api";
-import { formatDateTime, formatRunStatus, toneForStatus } from "../lib/formatters";
+import {
+  formatDateTime,
+  formatRunStatus,
+  toneForStatus
+} from "../lib/formatters";
 import type { PlatformState, RunRecord, RunStatus } from "../lib/types";
 
 function statusLabel(status: RunStatus) {
@@ -13,15 +18,19 @@ function statusLabel(status: RunStatus) {
 }
 
 export function RunsPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [platformState, setPlatformState] = useState<PlatformState | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState(searchParams.get("runId") || "");
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [mode, setMode] = useState<"headless" | "headed">("headless");
   const [runCount, setRunCount] = useState("1");
+  const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
   const [logSearch, setLogSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const deferredLogSearch = useDeferredValue(logSearch);
 
   useEffect(() => {
@@ -36,13 +45,18 @@ export function RunsPage() {
 
         setRuns(nextRuns);
         setPlatformState(nextState.state);
-        setSelectedPlanId((current) => current || nextState.state.selectedPlanId || nextState.state.plans[0]?.id || "");
+        setSelectedPlanId(
+          (current) => current || nextState.state.selectedPlanId || nextState.state.plans[0]?.id || ""
+        );
         setMode(nextState.state.system.defaultRunMode);
-        setSelectedRunId((current) => current || nextRuns[0]?.id || "");
+        setSelectedRunId((current) => {
+          const preferredId = searchParams.get("runId") || current;
+          return nextRuns.some((run) => run.id === preferredId) ? preferredId : nextRuns[0]?.id || "";
+        });
         setMessage("");
       } catch (error) {
         if (!cancelled) {
-          setMessage(error instanceof Error ? error.message : "读取运行中心失败。");
+          setMessage(error instanceof Error ? error.message : "读取运行流水失败。");
         }
       }
     }
@@ -55,11 +69,35 @@ export function RunsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedRunId) {
+      params.set("runId", selectedRunId);
+    } else {
+      params.delete("runId");
+    }
+    setSearchParams(params, { replace: true });
+  }, [selectedRunId, setSearchParams]);
+
+  const visibleRuns = runs.filter((run) => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return [run.planName, run.siteName, run.status, run.latestStage?.stageLabel, run.summary]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+
   const selectedRun = runs.find((run) => run.id === selectedRunId) || runs[0] || null;
   const activeRun = runs.find((run) => run.status === "running" || run.status === "stopping") || null;
-  const visibleLogs = selectedRun?.logs.filter((entry) =>
-    entry.text.toLowerCase().includes(deferredLogSearch.toLowerCase())
-  ) || [];
+  const visibleLogs =
+    selectedRun?.logs.filter((entry) =>
+      entry.text.toLowerCase().includes(deferredLogSearch.toLowerCase())
+    ) || [];
 
   async function refreshRuns() {
     const payload = await api.getRuns();
@@ -81,11 +119,7 @@ export function RunsPage() {
       await api.startRun(selectedPlanId, mode, parsedRunCount);
       const refreshedRuns = await refreshRuns();
       setSelectedRunId(refreshedRuns[0]?.id || "");
-      setSuccess(
-        parsedRunCount > 1
-          ? `测试任务已启动，将连续执行 ${parsedRunCount} 次。`
-          : "测试任务已启动。"
-      );
+      setSuccess(parsedRunCount > 1 ? `测试已启动，计划连续执行 ${parsedRunCount} 次。` : "测试已启动。");
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "启动运行失败。");
@@ -106,20 +140,15 @@ export function RunsPage() {
   return (
     <div className="workspace-stack">
       <WorkspaceHeader
-        eyebrow="运行中心"
-        title="执行不再藏在脚本后面"
-        description="围绕测试方案发起运行、盯阶段、看日志、识别人工介入点，把执行和排查放在同一块画布里。"
+        eyebrow="运行流水"
+        title="单次运行回到统一流水台账"
+        description="这里按单次运行记录看阶段、状态、日志和人工介入点。任务中心看整体编排，这里看每一次真实执行。"
         actions={
           <>
             <button type="button" className="accent-button" onClick={handleStartRun}>
               启动运行
             </button>
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={handleStopRun}
-              disabled={!activeRun}
-            >
+            <button type="button" className="ghost-button" onClick={handleStopRun} disabled={!activeRun}>
               停止当前运行
             </button>
           </>
@@ -131,122 +160,181 @@ export function RunsPage() {
 
       <SectionCard
         title="运行控制"
-        subtitle="先选方案，再决定是否切到有头模式观察真实页面行为；运行次数大于 1 时会在同一任务内连续执行，并沿用现有重试逻辑。"
+        subtitle="先选方案，再决定是否切换有头模式；连续执行次数会在同一任务内串行完成。"
       >
-        <div className="form-grid">
-          <label>
-            选择方案
-            <select
-              value={selectedPlanId}
-              onChange={(event) => setSelectedPlanId(event.target.value)}
-            >
-              {platformState?.plans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            运行模式
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as "headless" | "headed")}
-            >
-              <option value="headless">无头模式</option>
-              <option value="headed">有头模式</option>
-            </select>
-          </label>
-          <label>
-            运行次数
+        <div className="panel-toolbar panel-toolbar--split">
+          <div className="form-grid compact-grid">
+            <label>
+              方案
+              <select value={selectedPlanId} onChange={(event) => setSelectedPlanId(event.target.value)}>
+                {platformState?.plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              模式
+              <select value={mode} onChange={(event) => setMode(event.target.value as "headless" | "headed")}>
+                <option value="headless">无头模式</option>
+                <option value="headed">有头模式</option>
+              </select>
+            </label>
+            <label>
+              次数
+              <input type="number" min={1} max={20} step={1} value={runCount} onChange={(event) => setRunCount(event.target.value)} />
+            </label>
+          </div>
+
+          <label className="inline-search">
             <input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              value={runCount}
-              onChange={(event) => setRunCount(event.target.value)}
+              value={search}
+              placeholder="搜索方案 / 站点 / 状态 / 阶段"
+              onChange={(event) =>
+                startTransition(() => {
+                  setSearch(event.target.value);
+                })
+              }
             />
           </label>
         </div>
       </SectionCard>
 
-      <div className="editor-layout">
-        <SectionCard
-          title="运行记录"
-          subtitle="把最近的执行实例组织成可比较的时间线，而不是只有一块实时日志。"
-        >
-          <div className="resource-list">
-            {runs.length ? (
-              runs.map((run) => (
-                <button
-                  key={run.id}
-                  type="button"
-                  className={selectedRun?.id === run.id ? "resource-chip is-active" : "resource-chip"}
-                  onClick={() =>
-                    startTransition(() => {
-                      setSelectedRunId(run.id);
-                      setSuccess("");
-                    })
-                  }
-                >
-                  <strong>{run.planName}</strong>
-                  <span>{run.siteName}</span>
-                  <small>{formatDateTime(run.startedAt)}</small>
-                </button>
-              ))
-            ) : (
-              <p className="empty-copy">还没有运行记录。</p>
-            )}
+      <div className="detail-layout">
+        <SectionCard title="运行台账" subtitle="左侧列表按时间倒序排列，点击即可查看右侧详情。">
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>方案</th>
+                  <th>站点</th>
+                  <th>阶段</th>
+                  <th>状态</th>
+                  <th>开始时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRuns.length ? (
+                  visibleRuns.map((run) => (
+                    <tr
+                      key={run.id}
+                      className={selectedRun?.id === run.id ? "is-selected" : undefined}
+                      onClick={() => setSelectedRunId(run.id)}
+                    >
+                      <td>
+                        <div className="table-primary">
+                          <strong>{run.planName}</strong>
+                          <span>{run.summary}</span>
+                        </div>
+                      </td>
+                      <td>{run.siteName}</td>
+                      <td>{run.latestStage?.stageLabel || "尚无阶段信息"}</td>
+                      <td>
+                        <StatusPill tone={toneForStatus(run.status)}>{statusLabel(run.status)}</StatusPill>
+                      </td>
+                      <td>{formatDateTime(run.startedAt)}</td>
+                      <td>
+                        <div className="table-actions">
+                          <ActionIconButton icon="view" label="查看" tone="accent" onClick={() => setSelectedRunId(run.id)} />
+                          {run.taskId ? (
+                            <ActionIconButton
+                              icon="logs"
+                              label="查看任务"
+                              onClick={() => navigate(`/tasks?taskId=${encodeURIComponent(run.taskId || "")}`)}
+                            />
+                          ) : null}
+                          <ActionIconButton
+                            icon="open"
+                            label="查看产物"
+                            onClick={() => navigate(`/artifacts?runId=${encodeURIComponent(run.id)}`)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="table-empty">
+                      还没有运行记录。
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </SectionCard>
 
         <SectionCard
-          title="运行详情"
-          subtitle={selectedRun ? `运行开始于 ${formatDateTime(selectedRun.startedAt)}` : "选择左侧运行记录查看详情。"}
+          title={selectedRun ? `运行详情 · ${selectedRun.planName}` : "运行详情"}
+          subtitle={selectedRun ? `开始于 ${formatDateTime(selectedRun.startedAt)}` : "选择左侧运行记录查看详情。"}
           actions={
             selectedRun ? (
-              <>
+              <div className="panel-toolbar">
                 {selectedRun.taskId ? (
-                  <a
-                    href={`/api/platform/tasks/${encodeURIComponent(selectedRun.taskId)}/download`}
+                  <Link
+                    to={`/tasks?taskId=${encodeURIComponent(selectedRun.taskId)}`}
                     className="ghost-button"
                   >
-                    下载任务包
-                  </a>
+                    查看任务
+                  </Link>
                 ) : null}
                 {selectedRun.reportAvailable ? (
                   <a href="/report" target="_blank" rel="noreferrer" className="ghost-button">
                     打开报告
                   </a>
                 ) : null}
-              </>
+              </div>
             ) : null
           }
         >
           {selectedRun ? (
-            <div className="run-detail-grid">
-              <div className="run-detail-grid__summary">
-                <StatusPill tone={toneForStatus(selectedRun.status)}>
-                  {statusLabel(selectedRun.status)}
-                </StatusPill>
-                <strong>{selectedRun.planName}</strong>
-                <p>{selectedRun.summary}</p>
+            <>
+              <div className="detail-summary">
+                <div>
+                  <span>状态</span>
+                  <strong>{statusLabel(selectedRun.status)}</strong>
+                  <p>{selectedRun.summary}</p>
+                </div>
+                <div>
+                  <span>最新阶段</span>
+                  <strong>{selectedRun.latestStage?.stageLabel || "尚无阶段信息"}</strong>
+                  <p>{selectedRun.latestStage?.details || "等待后续阶段输出。"}</p>
+                </div>
               </div>
 
-              <div className="mini-card-grid">
-                <article className="mini-card">
-                  <span>站点</span>
-                  <strong>{selectedRun.siteName}</strong>
-                </article>
-                <article className="mini-card">
-                  <span>最新阶段</span>
-                  <strong>{selectedRun.latestStage?.stageLabel || "未识别"}</strong>
-                </article>
-                <article className="mini-card">
-                  <span>退出码</span>
-                  <strong>{selectedRun.exitCode ?? "—"}</strong>
-                </article>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>字段</th>
+                      <th>值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>站点</td>
+                      <td>{selectedRun.siteName}</td>
+                    </tr>
+                    <tr>
+                      <td>模式</td>
+                      <td>{selectedRun.mode === "headed" ? "有头模式" : "无头模式"}</td>
+                    </tr>
+                    <tr>
+                      <td>退出码</td>
+                      <td>{selectedRun.exitCode ?? "—"}</td>
+                    </tr>
+                    <tr>
+                      <td>完成时间</td>
+                      <td>{formatDateTime(selectedRun.finishedAt || selectedRun.startedAt)}</td>
+                    </tr>
+                    <tr>
+                      <td>关联任务</td>
+                      <td>{selectedRun.taskId || "无"}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               {selectedRun.conclusion ? (
@@ -266,18 +354,19 @@ export function RunsPage() {
                 </article>
               ) : null}
 
-              <div className="toolbar-row">
-                <input
-                  className="search-input"
-                  placeholder="搜索日志…"
-                  value={logSearch}
-                  onChange={(event) =>
-                    startTransition(() => {
-                      setLogSearch(event.target.value);
-                    })
-                  }
-                />
-                <Link to={`/artifacts${selectedRun ? `?runId=${selectedRun.id}` : ""}`} className="ghost-button">
+              <div className="panel-toolbar panel-toolbar--split">
+                <label className="inline-search">
+                  <input
+                    value={logSearch}
+                    placeholder="搜索当前运行日志"
+                    onChange={(event) =>
+                      startTransition(() => {
+                        setLogSearch(event.target.value);
+                      })
+                    }
+                  />
+                </label>
+                <Link to={`/artifacts?runId=${encodeURIComponent(selectedRun.id)}`} className="ghost-button">
                   关联产物
                 </Link>
               </div>
@@ -292,7 +381,7 @@ export function RunsPage() {
                       .join("\n")
                   : "暂无日志输出。"}
               </pre>
-            </div>
+            </>
           ) : (
             <p className="empty-copy">启动一次运行后，这里会出现阶段、结论与日志。</p>
           )}

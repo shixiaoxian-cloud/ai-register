@@ -1,6 +1,7 @@
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
+import { ActionIconButton } from "../components/ActionIconButton";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
 import { StatusPill } from "../components/StatusPill";
@@ -9,7 +10,16 @@ import { api } from "../lib/api";
 import { formatDateTime, formatRunStatus, toneForStatus } from "../lib/formatters";
 import type { OverviewData } from "../lib/types";
 
+interface ResourceLedgerRow {
+  id: string;
+  label: string;
+  title: string;
+  detail: string;
+  route: string;
+}
+
 export function OverviewPage() {
+  const navigate = useNavigate();
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -61,208 +71,287 @@ export function OverviewPage() {
       .includes(query);
   });
 
+  const resourceLedger: ResourceLedgerRow[] = [
+    {
+      id: "site",
+      label: "当前站点",
+      title: overview?.featuredSite?.name || "未选择站点",
+      detail: overview?.featuredSite?.startUrl || "还没有有效目标地址。",
+      route: "/config"
+    },
+    {
+      id: "plan",
+      label: "当前方案",
+      title: overview?.featuredPlan?.name || "未选择方案",
+      detail: overview?.featuredPlan?.description || "还没有可复用测试方案。",
+      route: "/config"
+    },
+    {
+      id: "system",
+      label: "系统默认值",
+      title: overview?.system.defaultRunMode === "headed" ? "默认有头模式" : "默认无头模式",
+      detail: overview?.system.continueAfterProtectedChallenge
+        ? "已允许人工完成挑战后继续续跑。"
+        : "当前默认不启用人工续跑。",
+      route: "/system"
+    }
+  ];
+
+  const healthRoutes: Record<string, string> = {
+    sites: "/config",
+    plans: "/config",
+    mail: "/config",
+    runs: "/runs"
+  };
+
   return (
     <div className="workspace-stack">
       <WorkspaceHeader
-        eyebrow="仪表盘"
-        title="自动化测试平台控制台"
-        description="参考后台管理台的信息架构，把品牌区、导航、顶栏、工具栏和数据卡片压进同一张浅色工作画布。"
+        eyebrow="总览"
+        title="统一台账式自动化控制台"
+        description="把资源、任务、运行和产物都收束到统一的列表后台里。第一屏先看异常、看当前焦点，再决定进入配置、任务还是运行流水。"
         actions={
           <>
-            <Link to="/config" className="accent-button">
-              进入配置中心
+            <Link to="/config" className="ghost-button">
+              打开配置中心
             </Link>
-            <Link to="/runs" className="ghost-button">
-              查看运行中心
+            <Link to="/tasks" className="accent-button">
+              打开任务中心
             </Link>
-          </>        }
+          </>
+        }
       />
 
       {message ? <div className="banner banner-danger">{message}</div> : null}
 
-      <section className="console-toolbar">
-        <label className="console-search">
-          <span className="console-search__icon" aria-hidden="true" />
-          <input
-            aria-label="搜索最近运行"
-            placeholder="搜索站点 / 方案 / 状态 / 阶段"
-            value={search}
-            onChange={(event) =>
-              startTransition(() => {
-                setSearch(event.target.value);
-              })
-            }
-          />
-        </label>
-        <div className="toolbar-row">
-          <Link to="/artifacts" className="ghost-button">
-            产物中心
-          </Link>
-          <a href="/report" target="_blank" rel="noreferrer" className="ghost-button">
-            最新报告
-          </a>
-          <Link to="/config" className="accent-button">
-            新建资源
-          </Link>
-        </div>
-      </section>
-
       <div className="metrics-grid">
         <MetricCard
-          label="站点资源"
+          label="站点"
           value={overview?.summary.siteCount ?? "—"}
-          detail={`${overview?.summary.readySites ?? 0} 个站点已就绪`}
+          detail={`${overview?.summary.readySites ?? 0} 个已就绪`}
           tone="accent"
         />
         <MetricCard
-          label="测试方案"
+          label="方案"
           value={overview?.summary.planCount ?? "—"}
-          detail={`${overview?.summary.profileCount ?? 0} 个画像配置`}
+          detail={`${overview?.summary.profileCount ?? 0} 个画像可复用`}
           tone="success"
         />
         <MetricCard
-          label="邮箱配置"
+          label="邮箱"
           value={overview?.summary.mailConfigCount ?? "—"}
-          detail={`${overview?.summary.readyMailConfigs ?? 0} 个邮箱链路可用`}
+          detail={`${overview?.summary.readyMailConfigs ?? 0} 个链路可用`}
           tone="neutral"
         />
         <MetricCard
-          label="产物总数"
+          label="产物"
           value={overview?.summary.artifactCount ?? "—"}
-          detail={`${overview?.summary.reportCount ?? 0} 份报告 / ${overview?.summary.tokenCount ?? 0} 份 token`}
+          detail={`${overview?.summary.reportCount ?? 0} 份报告 / ${overview?.summary.tokenCount ?? 0} 份令牌`}
           tone="warning"
         />
         <MetricCard
           label="异常运行"
           value={overview?.summary.failedRuns ?? "—"}
-          detail={`当前活跃状态：${formatRunStatus(overview?.summary.activeRunStatus ?? "idle")}`}
+          detail={`当前活跃：${formatRunStatus(overview?.summary.activeRunStatus ?? "idle")}`}
           tone="danger"
         />
       </div>
 
-      <div className="split-layout">
+      <div className="detail-layout">
         <SectionCard
-          title="平台健康度"
-          subtitle="把平台是否可跑、可配、可追踪压缩成几个可读状态。"
+          title="平台健康清单"
+          subtitle="把站点、方案、邮箱和运行状态放到一张台账里，看清楚哪里还没准备好。"
         >
-          <div className="health-grid">
-            {overview?.health.map((item) => (
-              <article key={item.id} className="health-card">
-                <StatusPill tone={item.tone}>{item.label}</StatusPill>
-                <p>{item.detail}</p>
-              </article>
-            )) ?? <p className="empty-copy">概览数据加载中…</p>}
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>模块</th>
+                  <th>状态</th>
+                  <th>说明</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview?.health.length ? (
+                  overview.health.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="table-primary">
+                          <strong>{item.label}</strong>
+                        </div>
+                      </td>
+                      <td>
+                        <StatusPill tone={item.tone}>{item.label}</StatusPill>
+                      </td>
+                      <td>{item.detail}</td>
+                      <td>
+                        <div className="table-actions">
+                          <ActionIconButton
+                            icon="view"
+                            label="查看"
+                            tone="accent"
+                            onClick={() => navigate(healthRoutes[item.id] || "/")}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="table-empty">
+                      概览数据加载中…
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </SectionCard>
 
         <SectionCard
-          title="当前焦点资源"
-          subtitle="始终把当前主要站点和方案放在第一屏，方便你立刻进入下一步。"
+          title="当前资源焦点"
+          subtitle="这里固定显示当前主要站点、方案和系统默认值，方便快速跳转。"
         >
-          <div className="focus-stack">
-            <div className="focus-card">
-              <span>站点</span>
-              <strong>{overview?.featuredSite?.name || "未选择站点"}</strong>
-              <p>{overview?.featuredSite?.startUrl || "当前还没有有效目标地址。"}</p>
-            </div>
-            <div className="focus-card">
-              <span>方案</span>
-              <strong>{overview?.featuredPlan?.name || "未选择方案"}</strong>
-              <p>{overview?.featuredPlan?.description || "还没有可复用测试方案。"}</p>
-            </div>
-            <div className="focus-card">
-              <span>系统偏好</span>
-              <strong>{overview?.system.defaultRunMode === "headed" ? "默认有头模式" : "默认无头模式"}</strong>
-              <p>
-                {overview?.system.continueAfterProtectedChallenge
-                  ? "已允许人工续跑。"
-                  : "当前默认不启用人工续跑。"}
-              </p>
-            </div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>类型</th>
+                  <th>当前值</th>
+                  <th>说明</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resourceLedger.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.label}</td>
+                    <td>
+                      <div className="table-primary">
+                        <strong>{entry.title}</strong>
+                      </div>
+                    </td>
+                    <td>{entry.detail}</td>
+                    <td>
+                      <div className="table-actions">
+                        <ActionIconButton
+                          icon="view"
+                          label="查看"
+                          tone="accent"
+                          onClick={() => navigate(entry.route)}
+                        />
+                        <ActionIconButton
+                          icon="edit"
+                          label="修改"
+                          onClick={() => navigate(entry.route)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </SectionCard>
       </div>
 
       <SectionCard
-        title="最近运行"
-        subtitle="把执行记录整理成后台列表视图，在同一块卡片里比较方案、站点、阶段、状态和结论。"
-        actions={<Link to="/runs" className="ghost-button">查看全部运行</Link>}
+        title="最近运行台账"
+        subtitle="按统一表格查看最近的运行结果，直接跳转到运行流水、任务中心或产物中心。"
+        actions={
+          <label className="inline-search">
+            <input
+              aria-label="搜索最近运行"
+              placeholder="搜索方案 / 站点 / 状态 / 阶段"
+              value={search}
+              onChange={(event) =>
+                startTransition(() => {
+                  setSearch(event.target.value);
+                })
+              }
+            />
+          </label>
+        }
       >
-        <div className="table-panel">
-          <div className="table-panel__header table-panel__header--runs">
-            <span>方案 / 站点</span>
-            <span>阶段</span>
-            <span>状态</span>
-            <span>更新时间</span>
-            <span>结论</span>
-          </div>
-
-          <div className="table-panel__body">
-            {visibleRuns.length ? (
-              visibleRuns.map((run) => (
-                <article key={run.id} className="table-row table-row--runs">
-                  <div className="table-row__primary">
-                    <strong>{run.planName}</strong>
-                    <p>
-                      {run.siteName} · {formatDateTime(run.startedAt)}
-                    </p>
-                  </div>
-                  <div className="table-row__secondary">
-                    <span className="run-row__label">最新阶段</span>
-                    <p>{run.latestStage?.stageLabel || "尚无阶段信息"}</p>
-                  </div>
-                  <div className="table-row__status">
-                    <StatusPill tone={toneForStatus(run.status)}>
-                      {formatRunStatus(run.status)}
-                    </StatusPill>
-                  </div>
-                  <div className="table-row__secondary">
-                    <span className="run-row__label">最近时间</span>
-                    <p>{formatDateTime(run.finishedAt || run.startedAt)}</p>
-                  </div>
-                  <div className="table-row__secondary">
-                    <span className="run-row__label">运行结论</span>
-                    <p>{run.conclusion?.summary || run.summary}</p>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="empty-copy">当前条件下没有找到运行记录。</p>
-            )}
-          </div>
-
-          <div className="table-panel__footer">
-            <span>
-              显示 1 至 {visibleRuns.length} 共 {recentRuns.length} 条记录
-            </span>
-            <Link to="/runs" className="ghost-button">
-              打开运行中心
-            </Link>
-          </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>方案</th>
+                <th>站点</th>
+                <th>最新阶段</th>
+                <th>状态</th>
+                <th>更新时间</th>
+                <th>结论</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRuns.length ? (
+                visibleRuns.map((run) => (
+                  <tr key={run.id}>
+                    <td>
+                      <div className="table-primary">
+                        <strong>{run.planName}</strong>
+                      </div>
+                    </td>
+                    <td>{run.siteName}</td>
+                    <td>{run.latestStage?.stageLabel || "尚无阶段信息"}</td>
+                    <td>
+                      <StatusPill tone={toneForStatus(run.status)}>
+                        {formatRunStatus(run.status)}
+                      </StatusPill>
+                    </td>
+                    <td>{formatDateTime(run.finishedAt || run.startedAt)}</td>
+                    <td>{run.conclusion?.summary || run.summary}</td>
+                    <td>
+                      <div className="table-actions">
+                        <ActionIconButton
+                          icon="view"
+                          label="查看运行"
+                          tone="accent"
+                          onClick={() => navigate(`/runs?runId=${encodeURIComponent(run.id)}`)}
+                        />
+                        {run.taskId ? (
+                          <ActionIconButton
+                            icon="logs"
+                            label="查看任务"
+                            onClick={() =>
+                              navigate(`/tasks?taskId=${encodeURIComponent(run.taskId || "")}`)
+                            }
+                          />
+                        ) : null}
+                        <ActionIconButton
+                          icon="open"
+                          label="查看产物"
+                          onClick={() => navigate(`/artifacts?runId=${encodeURIComponent(run.id)}`)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="table-empty">
+                    当前条件下没有找到运行记录。
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="操作路径"
+        title="操作清单"
         subtitle={`最后更新时间：${formatDateTime(overview?.updatedAt)}`}
       >
-        <div className="operator-rail">
-          <div className="operator-step">
-            <span>01</span>
-            <strong>配置站点与方案</strong>
-            <p>在配置中心管理目标站点、画像、邮箱和可复用测试方案。</p>
-          </div>
-          <div className="operator-step">
-            <span>02</span>
-            <strong>发起任务并盯进度</strong>
-            <p>在运行中心观察每次执行的进度、人工介入提示和关键日志。</p>
-          </div>
-          <div className="operator-step">
-            <span>03</span>
-            <strong>沉淀结果产物</strong>
-            <p>在产物中心按运行追踪报告、Trace、媒体和 Token 输出。</p>
-          </div>
-        </div>
+        <ol className="workflow-list">
+          <li>先在配置中心维护站点、方案、画像和邮箱资源，保证资源处于可运行状态。</li>
+          <li>进入任务中心按任务视角发起批量执行，再通过运行流水盯具体阶段和人工介入点。</li>
+          <li>最后到产物中心回收报告、Trace、日志和令牌，形成可下载的任务归档。</li>
+        </ol>
       </SectionCard>
     </div>
   );

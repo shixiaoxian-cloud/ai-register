@@ -5,29 +5,20 @@ const navItems: Array<{
   label: string;
   meta: string;
   icon: string;
-  aliases?: string[];
 }> = [
-  { to: "/", label: "仪表盘", meta: "平台概览与健康", icon: "overview" },
-  { to: "/config", label: "配置中心", meta: "站点、方案与画像", icon: "config" },
-  {
-    to: "/runs",
-    label: "运行中心",
-    meta: "执行、日志与人工介入",
-    icon: "runs",
-    aliases: ["/tasks"]
-  },
-  { to: "/artifacts", label: "产物中心", meta: "报告、Trace 与令牌", icon: "artifacts" },
-  { to: "/system", label: "系统设置", meta: "偏好、入口与说明", icon: "system" }
+  { to: "/", label: "总览", meta: "平台概况与异常一览", icon: "overview" },
+  { to: "/config", label: "配置中心", meta: "站点、方案、画像、邮箱", icon: "config" },
+  { to: "/tasks", label: "任务中心", meta: "任务、批次、日志、产物", icon: "tasks" },
+  { to: "/runs", label: "运行流水", meta: "单次运行记录与阶段", icon: "runs" },
+  { to: "/artifacts", label: "产物中心", meta: "报告、Trace、日志、令牌", icon: "artifacts" },
+  { to: "/system", label: "系统设置", meta: "默认值、入口与说明", icon: "system" }
 ];
 
 export function AppShell() {
   const location = useLocation();
   const activeItem =
     navItems.find((item) =>
-      item.to === "/"
-        ? location.pathname === "/"
-        : location.pathname.startsWith(item.to) ||
-          item.aliases?.some((alias) => location.pathname.startsWith(alias))
+      item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)
     ) || navItems[0];
 
   return (
@@ -37,13 +28,13 @@ export function AppShell() {
           <div className="sidebar__mark">AP</div>
           <div className="sidebar__brand-copy">
             <strong>Auto Console</strong>
-            <span>授权保护验证后台</span>
+            <span>统一台账式控制台</span>
             <small className="sidebar__version">v0.1.0</small>
           </div>
         </div>
 
         <div className="sidebar__section">
-          <div className="sidebar__section-label">平台空间</div>
+          <div className="sidebar__section-label">工作区</div>
           <nav className="sidebar__nav">
             {navItems.map((item) => (
               <NavLink
@@ -68,9 +59,9 @@ export function AppShell() {
         </div>
 
         <div className="sidebar__footer">
-          <div className="sidebar__section-label">控制台说明</div>
-          <p>安全边界</p>
-          <span>只验证保护流程是否触发、拦截以及人工完成后能否继续。</span>
+          <div className="sidebar__section-label">安全边界</div>
+          <p>只验证保护流程</p>
+          <span>仅验证是否触发、是否拦截，以及人工完成后能否继续，不提供绕过能力。</span>
           <a href="/report" target="_blank" rel="noreferrer">
             打开最新报告
           </a>
@@ -84,10 +75,9 @@ export function AppShell() {
             <strong>{activeItem.meta}</strong>
           </div>
           <div className="topbar__actions">
-            <button type="button" className="topbar__icon-button" aria-label="通知中心">
-              <span className="sidebar__icon sidebar__icon--bell" aria-hidden="true" />
-            </button>
-            <span className="topbar__chip">CN ZH</span>
+            <a href="/report" target="_blank" rel="noreferrer" className="ghost-button">
+              最新报告
+            </a>
             <span className="topbar__chip topbar__chip--accent">SQLite 已连接</span>
           </div>
         </header>

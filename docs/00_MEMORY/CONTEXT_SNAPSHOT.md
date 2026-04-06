@@ -31,3 +31,9 @@
 > User: "增加约束，对输出的方案使用中文"
 - **Tags**: #workflow #language #chinese-output #proposal-format
 - **Ref**: Session 2026-04-05 (Chinese Plan Output Constraint)
+
+## [CNT-007] 2026-04-06
+> User: "允许: 基于本地真实浏览器或组织批准模板，导出并应用“浏览器环境配置”，用于授权站点测试；允许: UA / UA-CH / locale / timezone / viewport / screen / geolocation / 浏览器版本 这类可审计、可解释、与测试环境一致的配置；允许: 方案级绑定、来源追踪、审批标记、审计留痕、运行报告回显；禁止: stealthMode；禁止: Canvas/WebGL/Audio 噪声注入、插件伪造、navigator 深度篡改、随机轮换；禁止: “降低检测率”“规避机器人检测”“绕过保护”这类目标表述；禁止: 以 bot.sannysoft.com 之类检测站作为“有效性评分”主链路。"
+- **Tags**: #browser-environment-config #compliance #authorized-testing #acceptance-gate
+- **Ref**: Session 2026-04-06 (Authorized Browser Environment Capability)
+- **Note**: 上述允许项与禁止项被用户明确提升为验收前置条件；后续 OpenSpec、PRD、设计、实现和测试必须逐项可核对，不得以“反检测”或“设备指纹伪装”为目标表述。

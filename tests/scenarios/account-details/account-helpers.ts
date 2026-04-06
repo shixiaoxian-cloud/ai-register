@@ -12,6 +12,9 @@ import {
 import targetProfile from "../../../src/target.profile";
 import { getAgeFromBirthday } from "../../common/page-helpers";
 
+const birthdayListboxSelector =
+  '[role="group"]:has(input[name="birthday"]) button[aria-haspopup="listbox"]';
+
 export interface UserInfo {
   firstName: string;
   lastName: string;
@@ -60,11 +63,16 @@ export async function needsAccountDetails(page: Page): Promise<{
       .first()
       .isVisible()
       .catch(() => false);
+  const birthdayListboxVisible = await page
+    .locator(birthdayListboxSelector)
+    .nth(2)
+    .isVisible()
+    .catch(() => false);
 
   return {
     fullName: fullNameVisible,
     age: ageFieldVisible,
-    birthday: birthdayFieldVisible
+    birthday: birthdayFieldVisible || birthdayListboxVisible
   };
 }
 
@@ -114,6 +122,24 @@ export async function fillBirthday(page: Page, userInfo: UserInfo): Promise<void
 
   console.log(`[UserInfo] Filling birthday: ${userInfo.birthday}`);
   const [year, month, day] = userInfo.birthday.split("-");
+  const birthdayListbox = page.locator(birthdayListboxSelector);
+  const hasBirthdayListbox = await birthdayListbox
+    .nth(2)
+    .isVisible()
+    .catch(() => false);
+
+  if (hasBirthdayListbox) {
+    const monthIndex = Number.parseInt(month, 10) - 1;
+    const monthOption = new RegExp(
+      `${new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(Date.UTC(2000, monthIndex, 1)))}|${new Intl.DateTimeFormat("en-US", { month: "long" }).format(new Date(Date.UTC(2000, monthIndex, 1)))}|0?${monthIndex + 1}`,
+      "i"
+    );
+    for (const [index, option] of [[0, monthOption], [1, new RegExp(`^0?${Number.parseInt(day, 10)}$`)], [2, new RegExp(`^${year}$`)]] as const) {
+      await birthdayListbox.nth(index).click();
+      await page.locator('[role="option"]:visible').filter({ hasText: option }).first().click();
+    }
+    return;
+  }
 
   await humanDelay(300, 600);
   const monthField = page
