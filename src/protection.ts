@@ -15,13 +15,26 @@ async function isVisible(page: Page, selector: string | undefined): Promise<bool
     return false;
   }
 
-  const locator = page.locator(selector).first();
-  const count = await locator.count();
-  if (!count) {
-    return false;
+  // 分割逗号分隔的选择器，分别检查每一个
+  const selectors = selector.split(',').map(s => s.trim()).filter(s => s);
+
+  for (const sel of selectors) {
+    try {
+      const locator = page.locator(sel).first();
+      const count = await locator.count();
+      if (count > 0) {
+        const visible = await locator.isVisible().catch(() => false);
+        if (visible) {
+          return true;
+        }
+      }
+    } catch (error) {
+      // 如果某个选择器有问题，继续尝试下一个
+      continue;
+    }
   }
 
-  return locator.isVisible().catch(() => false);
+  return false;
 }
 
 async function detectOutcome(

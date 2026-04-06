@@ -469,6 +469,43 @@ export class TempMailService {
   }
 
   /**
+   * 等待并提取验证码（用于测试场景）
+   * @param mailboxId 邮箱 ID
+   * @param receivedAfter 只接受该时间点之后的新邮件
+   * @param codePattern 验证码正则表达式
+   * @param timeout 超时时间（毫秒）
+   */
+  async waitForVerificationCode(
+    mailboxId: string,
+    receivedAfter: Date,
+    codePattern?: RegExp,
+    timeout?: number
+  ): Promise<string> {
+    console.log(`[TempMail] Waiting for verification code...`);
+    console.log(`[TempMail] - Mailbox ID: ${mailboxId}`);
+    console.log(`[TempMail] - Received after: ${receivedAfter.toISOString()}`);
+    console.log(`[TempMail] - Timeout: ${timeout}ms`);
+
+    const email = await this.waitForEmail(mailboxId, {
+      timeout,
+      receivedAfter,
+      filter: (email) => {
+        // 检查邮件是否包含验证码
+        const code = this.extractVerificationCode(email, codePattern);
+        return code !== null;
+      }
+    });
+
+    const code = this.extractVerificationCode(email, codePattern);
+    if (!code) {
+      throw new Error(`Failed to extract verification code from email: ${email.subject}`);
+    }
+
+    console.log(`[TempMail] ✓ Extracted verification code: ${code}`);
+    return code;
+  }
+
+  /**
    * 完整流程：创建邮箱 -> 等待邮件 -> 提取验证码 -> 删除邮箱
    */
   async getVerificationCode(options: {

@@ -35,6 +35,36 @@ const defaultLoginDialogSelector = [
   '[data-radix-popper-content-wrapper]'
 ].join(", ");
 
+const workspaceSuccessSelectors = [
+  'text=/create.*workspace|workspace.*name|name.*workspace/i',
+  'text=/What\'s your company or team name\\?/i',
+  '[data-testid="workspace-name-input"]',
+  'input[placeholder*="workspace"]',
+  'input[placeholder*="Workspace"]',
+  'input[name="workspace-name"]'
+];
+
+function mergeSelectorExpressions(
+  ...selectorGroups: Array<string | undefined>
+): string | undefined {
+  const selectors = new Set<string>();
+
+  for (const group of selectorGroups) {
+    if (!group) {
+      continue;
+    }
+
+    for (const selector of group.split(",")) {
+      const trimmed = selector.trim();
+      if (trimmed) {
+        selectors.add(trimmed);
+      }
+    }
+  }
+
+  return selectors.size ? Array.from(selectors).join(", ") : undefined;
+}
+
 const defaultSelectors: TargetSelectors = {
   loginDialog: defaultLoginDialogSelector,
   email: defaultEmailSelector,
@@ -76,9 +106,7 @@ const defaultSelectors: TargetSelectors = {
     'text=/What brings you to ChatGPT/i',
     'text=/New chat/i',
     'text=/welcome|dashboard|account created|registration complete/i',
-    'text=/create.*workspace|workspace.*name|name.*workspace/i',
-    '[data-testid="workspace-name-input"]',
-    'input[placeholder*="workspace" i]'
+    ...workspaceSuccessSelectors
   ].join(", "),
   blocked: 'text=/access denied|temporarily blocked|suspicious activity detected|try again later/i',
   fullName: [
@@ -167,7 +195,14 @@ const targetProfile: TargetProfile = {
   grantedPermissions: activeProfile.grantedPermissions ?? [],
   selectors: {
     ...defaultSelectors,
-    ...(activeProfile.selectors ?? {})
+    ...(activeProfile.selectors ?? {}),
+    // Active profiles stored in SQLite may still carry the older success selector set.
+    // Always keep workspace naming markers so the post-registration flow is recognized.
+    success:
+      mergeSelectorExpressions(
+        activeProfile.selectors?.success ?? defaultSelectors.success,
+        workspaceSuccessSelectors.join(", ")
+      ) ?? defaultSelectors.success
   },
   emailVerification: normalizeEmailVerificationConfig(activeProfile.emailVerification),
   async prepare(page) {
