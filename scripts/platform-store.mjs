@@ -66,6 +66,79 @@ function parseStoredJson(value, fallback) {
   return safeJsonParse(value, clone(fallback));
 }
 
+function decodeBlobUtf8(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value.toString("utf8");
+  }
+
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("utf8");
+  }
+
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value);
+}
+
+function parseArtifactJsonBlob(value) {
+  const rawText = decodeBlobUtf8(value).replace(/^\uFEFF/, "").trim();
+  if (!rawText) {
+    throw new Error("产物内容为空。");
+  }
+
+  return JSON.parse(rawText);
+}
+
+function convertCpaPayloadToSub2ApiAccount(cpaData) {
+  if (!cpaData?.type || !cpaData?.credentials) {
+    return null;
+  }
+
+  return {
+    name: cpaData.email || cpaData.name,
+    notes: "",
+    platform: cpaData.platform || "openai",
+    type: "oauth",
+    credentials: {
+      access_token: cpaData.credentials.access_token || cpaData.access_token,
+      refresh_token: cpaData.credentials.refresh_token || cpaData.refresh_token || "",
+      expires_in: cpaData.credentials.expires_in || 863999,
+      expires_at: cpaData.credentials.expires_at,
+      chatgpt_account_id: cpaData.credentials.chatgpt_account_id || cpaData.chatgpt_account_id,
+      chatgpt_user_id: cpaData.credentials.chatgpt_user_id || cpaData.chatgpt_user_id,
+      organization_id: cpaData.credentials.organization_id || cpaData.organization_id || "",
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+      model_mapping: {
+        "gpt-5.1": "gpt-5.1",
+        "gpt-5.1-codex": "gpt-5.1-codex",
+        "gpt-5.1-codex-max": "gpt-5.1-codex-max",
+        "gpt-5.1-codex-mini": "gpt-5.1-codex-mini",
+        "gpt-5.2": "gpt-5.2",
+        "gpt-5.2-codex": "gpt-5.2-codex",
+        "gpt-5.3": "gpt-5.3",
+        "gpt-5.3-codex": "gpt-5.3-codex",
+        "gpt-5.4": "gpt-5.4",
+        "gpt-5.4-mini": "gpt-5.4-mini"
+      }
+    },
+    extra: {
+      email: cpaData.extra?.email || cpaData.email,
+      password: cpaData.extra?.password || ""
+    },
+    group_ids: [2],
+    concurrency: 10,
+    priority: 1,
+    rate_multiplier: 1,
+    auto_pause_on_expired: true
+  };
+}
+
 function serializeJson(value) {
   return JSON.stringify(value ?? null);
 }
@@ -126,6 +199,18 @@ function normalizeObject(value, fallback = {}) {
   }
 
   return clone(value);
+}
+
+function normalizePreferredLandingPage(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  switch (normalized) {
+    case "runs":
+    case "config":
+    case "overview":
+      return normalized;
+    default:
+      return "overview";
+  }
 }
 
 function readEnvValue(envText, key) {
@@ -493,7 +578,7 @@ function normalizeTaskRecord(record) {
   return {
     id: String(record.id || createId("task")),
     name: String(record.name || "未命名任务").trim(),
-    status: String(record.status || "idle").trim() || "idle",
+    status: normalizeTaskStatus(record.status),
     sourceKind: String(record.sourceKind || "synthetic").trim() || "synthetic",
     sourceRef: String(record.sourceRef || "").trim(),
     createdAt: String(record.createdAt || currentTime),
@@ -507,12 +592,303 @@ function normalizeCaseRecord(record) {
     id: String(record.id || createId("case")),
     taskId: String(record.taskId || "").trim(),
     name: String(record.name || "默认用例").trim(),
-    status: String(record.status || "idle").trim() || "idle",
+    status: normalizeCaseStatus(record.status),
     sourceKind: String(record.sourceKind || "synthetic").trim() || "synthetic",
     sourceRef: String(record.sourceRef || "").trim(),
     createdAt: String(record.createdAt || currentTime),
     updatedAt: String(record.updatedAt || currentTime)
   };
+}
+
+function normalizeTaskStatus(value) {
+  const status = String(value || "").trim();
+
+  switch (status) {
+    case "running":
+    case "stopping":
+      return "running";
+    case "passed":
+    case "success":
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "stopped":
+      return "stopped";
+    default:
+      return "pending";
+  }
+}
+
+function normalizeCaseStatus(value) {
+  const status = String(value || "").trim();
+
+  switch (status) {
+    case "retrying":
+      return "retrying";
+    case "running":
+    case "stopping":
+      return "running";
+    case "passed":
+    case "success":
+    case "completed":
+      return "success";
+    case "failed":
+      return "failed";
+    case "stopped":
+      return "stopped";
+    default:
+      return "pending";
+  }
+}
+
+function stripAnsi(value) {
+  return String(value || "").replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function parseRepeatEachCount(command) {
+  const match = String(command || "").match(/--repeat-each=(\d+)/);
+  const parsed = match ? Number(match[1]) : 1;
+  return Number.isInteger(parsed) && parsed > 1 ? parsed : 1;
+}
+
+function parseCaseSequenceFromResultLine(text) {
+  const stripped = stripAnsi(text).trim();
+  const match = stripped.match(
+    /^(?:✓|✘|ok|x)\s+(\d+)\s+tests[\\/]+protection-validation\.spec\.ts:\d+:\d+/i
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isSuccessfulResultLine(text) {
+  const stripped = stripAnsi(text).trim();
+  return /^(?:✓|ok)\s+\d+\s+tests[\\/]+protection-validation\.spec\.ts:\d+:\d+/i.test(stripped);
+}
+
+function detectLatestStageFromLogs(logEntries) {
+  if (!Array.isArray(logEntries)) {
+    return null;
+  }
+
+  for (let index = logEntries.length - 1; index >= 0; index -= 1) {
+    const text = String(logEntries[index]?.text || "");
+    const match = text.match(/^\[STAGE\]\s(.+?)\s\|\s(.+?)\s\|\s(.*?)\s\|\s(.+)$/);
+
+    if (match) {
+      return {
+        stageLabel: match[1],
+        outcomeKind: match[2],
+        url: match[3],
+        details: match[4]
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractRetrySummaryFromLogs(logEntries) {
+  let maxAttempt = 1;
+  let maxTotal = 1;
+
+  for (const entry of logEntries || []) {
+    const match = String(entry?.text || "").match(
+      /\[Run\]\sStarting registration attempt\s+(\d+)\s*\/\s*(\d+)/
+    );
+
+    if (!match) {
+      continue;
+    }
+
+    maxAttempt = Math.max(maxAttempt, Number(match[1]) || 1);
+    maxTotal = Math.max(maxTotal, Number(match[2]) || 1);
+  }
+
+  return {
+    retryCount: Math.max(0, maxAttempt - 1),
+    maxRetries: Math.max(0, maxTotal - 1)
+  };
+}
+
+function extractFailureMessageFromLogs(logEntries) {
+  for (let index = logEntries.length - 1; index >= 0; index -= 1) {
+    const text = stripAnsi(logEntries[index]?.text || "").trim();
+    if (!text) {
+      continue;
+    }
+
+    if (/^(?:TypeError|ReferenceError|RangeError|SyntaxError|AssertionError|TimeoutError|Error):/i.test(text)) {
+      return text;
+    }
+
+    if (/执行失败|失败或异常|启动测试失败|cannot read properties|timed out|timeout/i.test(text)) {
+      return text;
+    }
+  }
+
+  return "执行失败";
+}
+
+function buildDerivedCaseRunRecord(parentRun, caseId, sequence, status, logEntries, latestStage, errorMessage) {
+  return {
+    ...parentRun,
+    id: `${parentRun.id}::repeat-${sequence}`,
+    caseId,
+    status:
+      status === "success"
+        ? "passed"
+        : status === "running"
+          ? "running"
+          : status === "stopped"
+            ? "stopped"
+            : status === "failed"
+              ? "failed"
+              : "idle",
+    summary:
+      status === "success"
+        ? `第 ${sequence} 次执行已完成。`
+        : status === "failed"
+          ? errorMessage || `第 ${sequence} 次执行失败。`
+          : status === "running"
+            ? `第 ${sequence} 次执行进行中。`
+            : status === "stopped"
+              ? `第 ${sequence} 次执行已停止。`
+              : `第 ${sequence} 次执行待开始。`,
+    logs: logEntries,
+    latestStage,
+    insight: null,
+    conclusion: null,
+    artifactKeys: [],
+    reportAvailable: sequence === parseRepeatEachCount(parentRun.command) ? parentRun.reportAvailable : false,
+    pid: status === "running" ? parentRun.pid : null
+  };
+}
+
+function buildDerivedRepeatCasesFromRun(runRecord, taskId) {
+  const expectedCaseCount = parseRepeatEachCount(runRecord.command);
+  if (expectedCaseCount <= 1) {
+    return [];
+  }
+
+  const logEntries = Array.isArray(runRecord.logs) ? runRecord.logs : [];
+  const chunks = [];
+  let currentChunkLogs = [];
+
+  for (const entry of logEntries) {
+    currentChunkLogs.push(entry);
+    const sequence = parseCaseSequenceFromResultLine(entry.text);
+
+    if (!sequence) {
+      continue;
+    }
+
+    chunks.push({
+      sequence,
+      logs: currentChunkLogs,
+      hasResult: true
+    });
+    currentChunkLogs = [];
+  }
+
+  if (currentChunkLogs.length) {
+    if (chunks.length < expectedCaseCount) {
+      chunks.push({
+        sequence: (chunks[chunks.length - 1]?.sequence || 0) + 1,
+        logs: currentChunkLogs,
+        hasResult: false
+      });
+    } else if (chunks.length) {
+      chunks[chunks.length - 1].logs.push(...currentChunkLogs);
+    }
+  }
+
+  const chunkBySequence = new Map(chunks.map((chunk) => [chunk.sequence, chunk]));
+  const derivedCases = [];
+
+  for (let sequence = 1; sequence <= expectedCaseCount; sequence += 1) {
+    const chunk = chunkBySequence.get(sequence);
+    const caseId = stableId("case", `${runRecord.id}:repeat:${sequence}`);
+    const chunkLogs = chunk?.logs || [];
+    const latestStage = detectLatestStageFromLogs(chunkLogs);
+    const retrySummary = extractRetrySummaryFromLogs(chunkLogs);
+    let status = "pending";
+
+    if (chunk?.hasResult) {
+      status = isSuccessfulResultLine(chunkLogs[chunkLogs.length - 1]?.text)
+        ? "success"
+        : "failed";
+    } else if (chunkLogs.length) {
+      if (runRecord.status === "running" || runRecord.status === "stopping") {
+        status = "running";
+      } else if (runRecord.status === "stopped") {
+        status = "stopped";
+      } else if (runRecord.status === "failed") {
+        status = "failed";
+      } else if (runRecord.status === "passed") {
+        status = "success";
+      }
+    } else if (runRecord.status === "running" || runRecord.status === "stopping") {
+      // 如果 run 正在运行，但这个 case 还没有日志，说明它在等待执行
+      // 对于第一个 case，应该标记为 running；其他 case 保持 pending
+      status = sequence === 1 ? "running" : "pending";
+    }
+
+    const startedAt = String(chunkLogs[0]?.at || "");
+    const finishedAt =
+      status === "pending" || status === "running"
+        ? ""
+        : String(chunkLogs[chunkLogs.length - 1]?.at || runRecord.finishedAt || "");
+    const errorMessage = status === "failed" ? extractFailureMessageFromLogs(chunkLogs) : undefined;
+
+    derivedCases.push({
+      id: caseId,
+      taskId: String(taskId || runRecord.taskId || ""),
+      name: `case-${sequence}`,
+      sequence,
+      status,
+      sourceKind: "derived-repeat-case",
+      sourceRef: runRecord.id,
+      startedAt,
+      finishedAt,
+      retryCount: retrySummary.retryCount,
+      maxRetries: retrySummary.maxRetries,
+      exitCode:
+        status === "success"
+          ? 0
+          : status === "failed"
+            ? (runRecord.exitCode ?? 1)
+            : undefined,
+      errorType: status === "failed" ? "unknown" : undefined,
+      errorMessage,
+      errorStack: undefined,
+      createdAt: startedAt || String(runRecord.startedAt || nowIso()),
+      updatedAt: String(chunkLogs[chunkLogs.length - 1]?.at || runRecord.finishedAt || runRecord.startedAt || nowIso()),
+      runCount: chunkLogs.length ? 1 : 0,
+      artifactCount: 0,
+      runs: chunkLogs.length
+        ? [
+            buildDerivedCaseRunRecord(
+              runRecord,
+              caseId,
+              sequence,
+              status,
+              chunkLogs,
+              latestStage,
+              errorMessage
+            )
+          ]
+        : [],
+      latestStage
+    });
+  }
+
+  return derivedCases;
 }
 
 function getArtifactStorageKind(relPath) {
@@ -609,7 +985,7 @@ function getDefaultSystemState() {
   return {
     defaultRunMode: "headless",
     continueAfterProtectedChallenge: false,
-    preferredLandingPage: "overview",
+    preferredLandingPage: normalizePreferredLandingPage("overview"),
     notes: "",
     updatedAt: nowIso()
   };
@@ -639,7 +1015,7 @@ function normalizeState(rawState) {
         rawState.system?.continueAfterProtectedChallenge,
         false
       ),
-      preferredLandingPage: String(rawState.system?.preferredLandingPage || "overview"),
+      preferredLandingPage: normalizePreferredLandingPage(rawState.system?.preferredLandingPage),
       notes: String(rawState.system?.notes || ""),
       updatedAt: rawState.system?.updatedAt || currentTime
     },
@@ -835,6 +1211,7 @@ function mapArtifactRow(row) {
     runId: artifact.runId || null,
     taskId: artifact.taskId || null,
     caseId: artifact.caseId || null,
+    isSensitive: artifact.type === "token",
     contentType: artifact.contentType,
     storageKind: artifact.storageKind
   };
@@ -2104,15 +2481,78 @@ export function createPlatformStore(projectRoot) {
 
   async function listTasks() {
     const connection = await getDatabase();
-    return connection.prepare(`
+    const tasks = connection.prepare(`
       SELECT
         tasks.*,
         (SELECT COUNT(*) FROM cases WHERE cases.task_id = tasks.id) AS case_count,
         (SELECT COUNT(*) FROM runs WHERE runs.task_id = tasks.id) AS run_count,
-        (SELECT COUNT(*) FROM artifacts WHERE artifacts.task_id = tasks.id) AS artifact_count
+        (SELECT COUNT(*) FROM artifacts WHERE artifacts.task_id = tasks.id) AS artifact_count,
+        (SELECT plan_id FROM runs WHERE runs.task_id = tasks.id ORDER BY datetime(started_at) DESC, id DESC LIMIT 1) AS plan_id,
+        (SELECT plan_name FROM runs WHERE runs.task_id = tasks.id ORDER BY datetime(started_at) DESC, id DESC LIMIT 1) AS plan_name,
+        (SELECT site_name FROM runs WHERE runs.task_id = tasks.id ORDER BY datetime(started_at) DESC, id DESC LIMIT 1) AS site_name,
+        (SELECT mode FROM runs WHERE runs.task_id = tasks.id ORDER BY datetime(started_at) DESC, id DESC LIMIT 1) AS run_mode,
+        (SELECT MIN(started_at) FROM runs WHERE runs.task_id = tasks.id) AS started_at,
+        (SELECT MAX(finished_at) FROM runs WHERE runs.task_id = tasks.id AND finished_at != '') AS finished_at,
+        (SELECT COUNT(*) FROM cases WHERE cases.task_id = tasks.id AND cases.status IN ('success', 'passed', 'completed', 'failed', 'stopped')) AS completed_cases,
+        (SELECT COUNT(*) FROM cases WHERE cases.task_id = tasks.id AND cases.status IN ('success', 'passed', 'completed')) AS success_cases,
+        (SELECT COUNT(*) FROM cases WHERE cases.task_id = tasks.id AND cases.status = 'failed') AS failed_cases
       FROM tasks
-      ORDER BY datetime(tasks.updated_at) DESC, tasks.id DESC
-    `).all().map(mapTaskRow);
+      ORDER BY datetime(COALESCE((SELECT MAX(started_at) FROM runs WHERE runs.task_id = tasks.id), tasks.updated_at)) DESC, tasks.id DESC
+    `).all().map((row) => {
+      const base = mapTaskRow(row);
+      const taskRuns = connection.prepare(`
+        SELECT *
+        FROM runs
+        WHERE task_id = ?
+        ORDER BY datetime(started_at) ASC, id ASC
+      `).all(base.id).map(mapRunRow);
+      const derivedCases = taskRuns.flatMap((runRecord) =>
+        buildDerivedRepeatCasesFromRun(runRecord, base.id)
+      );
+      const useDerivedCases = derivedCases.length > parseNumber(row.case_count, 0);
+      const completedCases = useDerivedCases
+        ? derivedCases.filter((caseRecord) =>
+            ["success", "failed", "stopped"].includes(String(caseRecord.status))
+          ).length
+        : parseNumber(row.completed_cases, 0);
+      const successCases = useDerivedCases
+        ? derivedCases.filter((caseRecord) => caseRecord.status === "success").length
+        : parseNumber(row.success_cases, 0);
+      const failedCases = useDerivedCases
+        ? derivedCases.filter((caseRecord) => caseRecord.status === "failed").length
+        : parseNumber(row.failed_cases, 0);
+      // 优先使用活跃 run 的状态
+      const activeRun = taskRuns.find((run) => run.status === "running" || run.status === "stopping");
+      const derivedTaskStatus = activeRun
+        ? activeRun.status
+        : useDerivedCases
+          ? derivedCases.some((caseRecord) => caseRecord.status === "running")
+            ? "running"
+            : derivedCases.some((caseRecord) => caseRecord.status === "failed")
+              ? "failed"
+              : derivedCases.some((caseRecord) => caseRecord.status === "stopped")
+                ? "stopped"
+                : derivedCases.length > 0 && derivedCases.every((caseRecord) => caseRecord.status === "success")
+                  ? "completed"
+                  : "pending"
+          : base.status;
+
+      return {
+        ...base,
+        status: derivedTaskStatus,
+        planId: String(row.plan_id || ""),
+        planName: String(row.plan_name || base.name),
+        siteName: String(row.site_name || ""),
+        runMode: row.run_mode === "headed" ? "headed" : "headless",
+        startedAt: String(row.started_at || base.createdAt),
+        finishedAt: String(row.finished_at || ""),
+        totalCases: useDerivedCases ? derivedCases.length : parseNumber(row.case_count, 0),
+        completedCases,
+        successCases,
+        failedCases
+      };
+    });
+    return tasks;
   }
 
   async function listCases(filter = {}) {
@@ -2126,15 +2566,80 @@ export function createPlatformStore(projectRoot) {
     }
 
     const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    return connection.prepare(`
+    const cases = connection.prepare(`
       SELECT
         cases.*,
         (SELECT COUNT(*) FROM runs WHERE runs.case_id = cases.id) AS run_count,
-        (SELECT COUNT(*) FROM artifacts WHERE artifacts.case_id = cases.id) AS artifact_count
+        (SELECT COUNT(*) FROM artifacts WHERE artifacts.case_id = cases.id) AS artifact_count,
+        (SELECT MIN(started_at) FROM runs WHERE runs.case_id = cases.id) AS started_at,
+        (SELECT MAX(finished_at) FROM runs WHERE runs.case_id = cases.id AND finished_at != '') AS finished_at,
+        (SELECT exit_code FROM runs WHERE runs.case_id = cases.id ORDER BY datetime(started_at) DESC LIMIT 1) AS exit_code,
+        (SELECT latest_stage_json FROM runs WHERE runs.case_id = cases.id ORDER BY datetime(started_at) DESC LIMIT 1) AS latest_stage_json
       FROM cases
       ${whereSql}
-      ORDER BY datetime(cases.updated_at) DESC, cases.id DESC
-    `).all(...values).map(mapCaseRow);
+      ORDER BY datetime(cases.created_at) ASC, cases.id ASC
+    `).all(...values).map((row) => {
+      const base = mapCaseRow(row);
+      const caseNameMatch = String(row.name || "").match(/^case-(\d+)(?:-retry(\d+))?$/);
+      const sequence = caseNameMatch ? Number(caseNameMatch[1]) : 0;
+      const retryCount = caseNameMatch && caseNameMatch[2] ? Number(caseNameMatch[2]) : 0;
+
+      return {
+        ...base,
+        sequence: sequence || base.retryIndex + 1,
+        startedAt: String(row.started_at || ""),
+        finishedAt: String(row.finished_at || ""),
+        retryCount,
+        maxRetries: 3,
+        exitCode: parseNumber(row.exit_code, null),
+        errorType: base.status === "failed" ? "unknown" : undefined,
+        errorMessage: base.status === "failed" ? "执行失败" : undefined,
+        errorStack: undefined,
+        latestStage: parseStoredJson(row.latest_stage_json, null),
+        runs: []
+      };
+    });
+
+    // 为每个 case 加载关联的 runs
+    for (const caseRecord of cases) {
+      const runs = connection.prepare(`
+        SELECT *
+        FROM runs
+        WHERE case_id = ?
+        ORDER BY datetime(started_at) DESC
+      `).all(caseRecord.id).map(mapRunRow);
+      caseRecord.runs = runs;
+    }
+
+    if (!filter.taskId) {
+      return cases;
+    }
+
+    const expandedCases = [];
+
+    for (const caseRecord of cases) {
+      const derivedCases =
+        caseRecord.runs.length === 1
+          ? buildDerivedRepeatCasesFromRun(caseRecord.runs[0], caseRecord.taskId)
+          : [];
+
+      if (derivedCases.length > 1) {
+        expandedCases.push(...derivedCases);
+        continue;
+      }
+
+      expandedCases.push(caseRecord);
+    }
+
+    return expandedCases.sort((left, right) => {
+      const leftSequence = Number(left.sequence || 0);
+      const rightSequence = Number(right.sequence || 0);
+      if (leftSequence !== rightSequence) {
+        return leftSequence - rightSequence;
+      }
+
+      return String(left.createdAt || "").localeCompare(String(right.createdAt || ""));
+    });
   }
 
   async function listArtifacts(filter = {}) {
@@ -2341,6 +2846,169 @@ export function createPlatformStore(projectRoot) {
     };
   }
 
+  async function buildTaskSub2ApiBundle(taskId) {
+    const connection = await getDatabase();
+    const normalizedTaskId = String(taskId || "").trim();
+    const taskRow = connection.prepare(`
+      SELECT *
+      FROM tasks
+      WHERE tasks.id = ?
+      LIMIT 1
+    `).get(normalizedTaskId);
+
+    if (!taskRow) {
+      throw new Error("找不到要下载的任务。");
+    }
+
+    const sub2apiRows = connection.prepare(`
+      SELECT *
+      FROM artifacts
+      WHERE task_id = ? AND type = 'token' AND rel_path LIKE '%/sub2api/%'
+      ORDER BY datetime(modified_at) ASC, id ASC
+    `).all(normalizedTaskId);
+    const cpaRows = connection.prepare(`
+      SELECT *
+      FROM artifacts
+      WHERE task_id = ? AND type = 'token' AND rel_path LIKE '%/cpa/%'
+      ORDER BY datetime(modified_at) ASC, id ASC
+    `).all(normalizedTaskId);
+
+    if (!sub2apiRows.length && !cpaRows.length) {
+      throw new Error("当前任务还没有可用的 token 文件。");
+    }
+
+    const task = mapTaskRow(taskRow);
+    const sourceGroups = [
+      {
+        label: "Sub2Api",
+        rows: sub2apiRows,
+        readAccounts(payload) {
+          return Array.isArray(payload?.accounts) ? payload.accounts : [];
+        }
+      },
+      {
+        label: "CPA",
+        rows: cpaRows,
+        readAccounts(payload) {
+          const account = convertCpaPayloadToSub2ApiAccount(payload);
+          return account ? [account] : [];
+        }
+      }
+    ].filter((group) => group.rows.length > 0);
+
+    let allAccounts = [];
+
+    for (const group of sourceGroups) {
+      const nextAccounts = [];
+
+      for (const row of group.rows) {
+        try {
+          const payload = parseArtifactJsonBlob(row.content_blob);
+          nextAccounts.push(...group.readAccounts(payload));
+        } catch (error) {
+          console.error(`读取 ${group.label} 文件失败 ${row.rel_path}:`, error);
+        }
+      }
+
+      if (nextAccounts.length > 0) {
+        allAccounts = nextAccounts;
+        break;
+      }
+    }
+
+    if (allAccounts.length === 0) {
+      throw new Error("没有可转换的有效 token 数据。");
+    }
+
+    // 构建 Sub2Api payload
+    const sub2apiPayload = {
+      proxies: [],
+      accounts: allAccounts
+    };
+
+    const rootName = `${sanitizeFileSegment(task.name || task.id, "task")}-${sanitizeFileSegment(task.id, "task")}`;
+    const fileName = `${rootName}.sub2api.json`;
+    const buffer = Buffer.from(JSON.stringify(sub2apiPayload, null, 2), "utf8");
+
+    return {
+      fileName,
+      contentType: "application/json",
+      buffer
+    };
+  }
+
+  async function saveTask(payload) {
+    const connection = await getDatabase();
+    const normalizedTaskId = String(payload?.id || "").trim();
+    const existingRow = normalizedTaskId
+      ? connection.prepare("SELECT * FROM tasks WHERE id = ? LIMIT 1").get(normalizedTaskId)
+      : null;
+    const nextTask = writeTaskToDatabase(connection, {
+      id: normalizedTaskId || undefined,
+      name: payload?.name,
+      status: payload?.status,
+      sourceKind: payload?.sourceKind || existingRow?.source_kind || "manual",
+      sourceRef: payload?.sourceRef || existingRow?.source_ref || "manual",
+      createdAt: existingRow?.created_at || nowIso(),
+      updatedAt: nowIso()
+    });
+
+    return {
+      ...nextTask,
+      planId: "",
+      planName: "",
+      siteName: "",
+      runMode: "headless",
+      totalCases: 0,
+      completedCases: 0,
+      successCases: 0,
+      failedCases: 0,
+      runCount: 0,
+      caseCount: 0,
+      artifactCount: 0,
+      startedAt: nextTask.createdAt,
+      finishedAt: ""
+    };
+  }
+
+  async function deleteTask(taskId) {
+    const connection = await getDatabase();
+    const normalizedTaskId = String(taskId || "").trim();
+
+    if (!normalizedTaskId) {
+      throw new Error("缺少要删除的任务 ID。");
+    }
+
+    const existingRow = connection.prepare(`
+      SELECT
+        tasks.*,
+        (SELECT COUNT(*) FROM runs WHERE runs.task_id = tasks.id) AS run_count,
+        (SELECT COUNT(*) FROM cases WHERE cases.task_id = tasks.id) AS case_count,
+        (SELECT COUNT(*) FROM artifacts WHERE artifacts.task_id = tasks.id) AS artifact_count
+      FROM tasks
+      WHERE tasks.id = ?
+      LIMIT 1
+    `).get(normalizedTaskId);
+
+    if (!existingRow) {
+      throw new Error("找不到要删除的任务。");
+    }
+
+    const runningRun = connection.prepare(`
+      SELECT id
+      FROM runs
+      WHERE task_id = ? AND status IN ('running', 'stopping')
+      LIMIT 1
+    `).get(normalizedTaskId);
+
+    if (runningRun) {
+      throw new Error("运行中的任务不能删除，请先停止它。");
+    }
+
+    connection.prepare("DELETE FROM tasks WHERE id = ?").run(normalizedTaskId);
+    return mapTaskRow(existingRow);
+  }
+
   async function saveSite(payload) {
     const state = await readState();
     const existingIndex = state.sites.findIndex((site) => site.id === payload.id);
@@ -2348,6 +3016,7 @@ export function createPlatformStore(projectRoot) {
       ...state.sites[existingIndex],
       ...payload
     });
+    assertSafeConfig(nextSite, "site");
 
     if (existingIndex >= 0) {
       state.sites[existingIndex] = {
@@ -2411,6 +3080,7 @@ export function createPlatformStore(projectRoot) {
       ...state.profiles[existingIndex],
       ...payload
     });
+    assertSafeConfig(nextProfile, "profile");
 
     if (existingIndex >= 0) {
       state.profiles[existingIndex] = {
@@ -2435,6 +3105,7 @@ export function createPlatformStore(projectRoot) {
       ...state.mailConfigs[existingIndex],
       ...payload
     });
+    assertSafeConfig(nextMailConfig, "mailConfig");
 
     if (existingIndex >= 0) {
       state.mailConfigs[existingIndex] = {
@@ -2462,6 +3133,7 @@ export function createPlatformStore(projectRoot) {
       },
       state
     );
+    assertSafeConfig(nextPlan, "plan");
 
     const siteExists = state.sites.some((site) => site.id === nextPlan.siteId);
     const profileExists = state.profiles.some((profile) => profile.id === nextPlan.profileId);
@@ -2500,21 +3172,135 @@ export function createPlatformStore(projectRoot) {
     return nextPlan;
   }
 
+  async function deletePlan(planId) {
+    const normalizedPlanId = String(planId || "").trim();
+    if (!normalizedPlanId) {
+      throw new Error("缺少要删除的方案 ID。");
+    }
+
+    const state = await readState();
+    const existingIndex = state.plans.findIndex((plan) => plan.id === normalizedPlanId);
+
+    if (existingIndex < 0) {
+      throw new Error("找不到要删除的方案。");
+    }
+
+    if (state.plans.length <= 1) {
+      throw new Error("平台至少需要保留一个测试方案。");
+    }
+
+    const [deletedPlan] = state.plans.splice(existingIndex, 1);
+
+    if (state.selectedPlanId === normalizedPlanId) {
+      state.selectedPlanId = state.plans[0]?.id || "";
+      state.selectedSiteId = state.plans[0]?.siteId || state.selectedSiteId;
+      state.selectedProfileId = state.plans[0]?.profileId || state.selectedProfileId;
+      state.selectedMailConfigId = state.plans[0]?.mailConfigId || state.selectedMailConfigId;
+    }
+
+    await persistState(state);
+    return deletedPlan;
+  }
+
+  async function deleteProfile(profileId) {
+    const normalizedProfileId = String(profileId || "").trim();
+    if (!normalizedProfileId) {
+      throw new Error("缺少要删除的画像 ID。");
+    }
+
+    const state = await readState();
+    const existingIndex = state.profiles.findIndex((profile) => profile.id === normalizedProfileId);
+
+    if (existingIndex < 0) {
+      throw new Error("找不到要删除的画像。");
+    }
+
+    const referencedPlans = state.plans.filter((plan) => plan.profileId === normalizedProfileId);
+    if (referencedPlans.length) {
+      const planNames = referencedPlans
+        .slice(0, 3)
+        .map((plan) => plan.name || plan.id)
+        .join("、");
+      const suffix = referencedPlans.length > 3 ? " 等方案" : "";
+      throw new Error(
+        `画像仍被 ${referencedPlans.length} 个方案引用，请先调整这些方案后再删除：${planNames}${suffix}`
+      );
+    }
+
+    if (state.profiles.length <= 1) {
+      throw new Error("平台至少需要保留一个画像配置。");
+    }
+
+    const [deletedProfile] = state.profiles.splice(existingIndex, 1);
+
+    if (state.selectedProfileId === normalizedProfileId) {
+      state.selectedProfileId = state.profiles[0]?.id || "";
+    }
+
+    await persistState(state);
+    return deletedProfile;
+  }
+
+  async function deleteMailConfig(mailConfigId) {
+    const normalizedMailConfigId = String(mailConfigId || "").trim();
+    if (!normalizedMailConfigId) {
+      throw new Error("缺少要删除的邮箱配置 ID。");
+    }
+
+    const state = await readState();
+    const existingIndex = state.mailConfigs.findIndex(
+      (mailConfig) => mailConfig.id === normalizedMailConfigId
+    );
+
+    if (existingIndex < 0) {
+      throw new Error("找不到要删除的邮箱配置。");
+    }
+
+    const referencedPlans = state.plans.filter(
+      (plan) => plan.mailConfigId === normalizedMailConfigId
+    );
+    if (referencedPlans.length) {
+      const planNames = referencedPlans
+        .slice(0, 3)
+        .map((plan) => plan.name || plan.id)
+        .join("、");
+      const suffix = referencedPlans.length > 3 ? " 等方案" : "";
+      throw new Error(
+        `邮箱配置仍被 ${referencedPlans.length} 个方案引用，请先调整这些方案后再删除：${planNames}${suffix}`
+      );
+    }
+
+    if (state.mailConfigs.length <= 1) {
+      throw new Error("平台至少需要保留一个邮箱配置。");
+    }
+
+    const [deletedMailConfig] = state.mailConfigs.splice(existingIndex, 1);
+
+    if (state.selectedMailConfigId === normalizedMailConfigId) {
+      state.selectedMailConfigId = state.mailConfigs[0]?.id || "";
+    }
+
+    await persistState(state);
+    return deletedMailConfig;
+  }
+
   async function updateSystem(payload) {
     const state = await readState();
-    state.system = {
+    const nextSystem = {
       ...state.system,
       defaultRunMode: payload.defaultRunMode === "headed" ? "headed" : "headless",
       continueAfterProtectedChallenge: parseBoolean(
         payload.continueAfterProtectedChallenge,
         state.system.continueAfterProtectedChallenge
       ),
-      preferredLandingPage: String(
+      preferredLandingPage: normalizePreferredLandingPage(
         payload.preferredLandingPage || state.system.preferredLandingPage || "overview"
       ),
       notes: String(payload.notes ?? state.system.notes ?? ""),
       updatedAt: nowIso()
     };
+    assertSafeConfig(nextSystem, "system");
+    state.system = nextSystem;
 
     await persistState(state);
     return state.system;
@@ -2717,11 +3503,17 @@ export function createPlatformStore(projectRoot) {
     getArtifactContent,
     getArtifactById,
     buildTaskDownloadBundle,
+    buildTaskSub2ApiBundle,
+    saveTask,
+    deleteTask,
     saveSite,
     deleteSite,
     savePlan,
+    deletePlan,
     saveProfile,
+    deleteProfile,
     saveMailConfig,
+    deleteMailConfig,
     updateSystem,
     testMailConfigConnection,
     activatePlan,

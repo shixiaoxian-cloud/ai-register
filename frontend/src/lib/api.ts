@@ -11,6 +11,7 @@ import type {
   RunRecord,
   SiteResource,
   SystemSettings,
+  TaskMutation,
   TaskRecord
 } from "./types";
 
@@ -119,6 +120,14 @@ export const api = {
     return payload.plan;
   },
 
+  async deletePlan(planId: string) {
+    const payload = await requestJson<{ ok: true; plan: PlanResource }>(
+      `/api/platform/plans/${planId}`,
+      { method: "DELETE" }
+    );
+    return payload.plan;
+  },
+
   async saveProfile(profile: ProfileResource) {
     const method = profile.id ? "PUT" : "POST";
     const target = profile.id ? `/api/platform/profiles/${profile.id}` : "/api/platform/profiles";
@@ -126,6 +135,14 @@ export const api = {
       method,
       body: profile
     });
+    return payload.profile;
+  },
+
+  async deleteProfile(profileId: string) {
+    const payload = await requestJson<{ ok: true; profile: ProfileResource }>(
+      `/api/platform/profiles/${profileId}`,
+      { method: "DELETE" }
+    );
     return payload.profile;
   },
 
@@ -138,6 +155,14 @@ export const api = {
       method,
       body: mailConfig
     });
+    return payload.mailConfig;
+  },
+
+  async deleteMailConfig(mailConfigId: string) {
+    const payload = await requestJson<{ ok: true; mailConfig: MailConfigResource }>(
+      `/api/platform/mail-configs/${mailConfigId}`,
+      { method: "DELETE" }
+    );
     return payload.mailConfig;
   },
 
@@ -161,6 +186,24 @@ export const api = {
   async getTasks() {
     const payload = await requestJson<{ ok: true; tasks: TaskRecord[] }>("/api/platform/tasks");
     return payload.tasks;
+  },
+
+  async saveTask(task: TaskMutation) {
+    const method = task.id ? "PUT" : "POST";
+    const target = task.id ? `/api/platform/tasks/${task.id}` : "/api/platform/tasks";
+    const payload = await requestJson<{ ok: true; task: TaskRecord }>(target, {
+      method,
+      body: task
+    });
+    return payload.task;
+  },
+
+  async deleteTask(taskId: string) {
+    const payload = await requestJson<{ ok: true; task: TaskRecord }>(
+      `/api/platform/tasks/${taskId}`,
+      { method: "DELETE" }
+    );
+    return payload.task;
   },
 
   async getCases(taskId?: string) {

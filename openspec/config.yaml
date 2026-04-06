@@ -1,34 +1,38 @@
 schema: spec-driven
 
 context: |
-  Project: ai-register
-  Tech stack: TypeScript, Playwright, Node.js, Express, JSON configuration.
-  Mission boundary: validate target-site protections and flow continuity; never provide bypass techniques for CAPTCHA, SMS verification, or device challenges.
-  Collaboration model:
-  - ai-pm owns product discovery, scope, PRD, interaction, entity modeling, design handoff, and project memory.
-  - OpenSpec owns change proposals, technical design deltas, implementation task tracking, and archive.
-  Proposal gate:
-  - Before entering openspec-propose, present exactly two viable options and wait for explicit user selection.
-  - A recommended option is allowed, but recommendation does not replace user confirmation.
-  Documentation layout:
-  - Product memory: docs/00_MEMORY/, docs/TODO.md
-  - Product assets: docs/01_STRATEGY/, docs/02_PRD/, docs/03_DESIGN/, docs/04_RESOURCES/
-  - Technical reference docs: docs/guides/, docs/implementation/, docs/analysis/, docs/troubleshooting/
-  Change authoring rules:
-  - Reuse existing product artifacts when they exist instead of inventing parallel scope descriptions.
-  - Explicitly call out assumptions when upstream product artifacts are missing or incomplete.
+  仓库：ai-register。
+  当前仓库消费共享 baseline skill `openspec-shared-baseline`。
+  共享 baseline 由 `docs/baseline/BASELINE_AGENT_RULES.md`、`openspec/specs/platform-core/spec.md` 与 `openspec/specs/spec-authoring/spec.md` 提供；本文件只补充当前仓库的 OpenSpec overlay。
+  项目目标：基于 Playwright 验证已获授权目标站点的保护流程是否触发、是否拦截，以及在人工完成保护步骤后能否继续。
+  安全边界：只验证保护机制，不提供 CAPTCHA 绕过、短信验证绕过、设备指纹伪装或机器人规避实现。
+  技术栈：TypeScript、Playwright、Node.js、React、Vite、Express、JSON 配置。
+  项目文档真值：
+  - `docs/00_MEMORY/CONTEXT_SNAPSHOT.md`
+  - `docs/00_MEMORY/SESSION_MEMORY.md`
+  - `docs/TODO.md`
+  - `docs/01_STRATEGY/DECISIONS.md`
+  - `docs/02_PRD/framework-prd.md`
+  - `docs/03_DESIGN/README.md`
+  - `docs/04_RESOURCES/README.md`
+  - `docs/README.md`
+  当前仓库额外 capability：
+  - 当前仅启用 baseline-managed 核心规范，尚未定义 project-owned capability spec。
+  - 如需新增项目私有 capability，统一放在 `openspec/specs/<capability>/spec.md`。
 
 rules:
   proposal:
-    - Describe the target problem, value anchor, scope, and non-goals in user language.
-    - Reference relevant docs/00_MEMORY, docs/01_STRATEGY, or docs/02_PRD sections when available.
-    - Only author a proposal after the user has selected one of the two presented options.
-    - If the request is still mostly value or scope discovery, stop and use ai-pm before expanding implementation details.
+    - proposal 必须先复用现有项目文档和 change 上下文，不得重新发明平行范围定义。
+    - 对于涉及站点流程、保护验证或人工接续步骤的变更，必须明确目标流程、非目标范围和安全边界。
+    - 只在用户已经明确选定候选方案后进入 `openspec-propose`。
+  specs:
+    - specs 必须与 `docs/baseline/BASELINE_AGENT_RULES.md`、`openspec/specs/platform-core/spec.md` 和 `openspec/specs/spec-authoring/spec.md` 保持一致。
+    - 如新增项目私有 capability，必须引用对应产品文档或记忆文档作为上游真值。
   design:
-    - Map the solution back to the affected user journey, state changes, and system boundaries.
-    - Preserve the project's safety boundary: validate protection flows, do not design bypass behavior.
-    - Prefer leveraging existing architecture and docs rather than duplicating concepts.
+    - design 必须解释共享 baseline 与当前仓库 overlay 的分层边界。
+    - design 必须说明保护验证链路、人工接续点、失败路径和日志可观测性。
+    - design 不得设计任何绕过 CAPTCHA、短信验证或设备挑战的行为。
   tasks:
-    - Break work into small, verifiable steps with explicit validation.
-    - Link each task to the user journey, TODO item, or spec delta it satisfies when possible.
-    - Separate artifact updates from code changes when both are required.
+    - tasks 必须拆成可验证的小步骤，并显式写出验证命令或验证方式。
+    - tasks 必须区分文档更新、配置变更、测试变更和代码变更。
+    - tasks 完成后必须同步更新任务状态，并记录测试回执和修改留痕。

@@ -1,0 +1,120 @@
+{
+  "id": "preset_chrome_130_macos",
+  "name": "Chrome 130 (macOS)",
+  "description": "标准 Chrome 130 浏览器指纹 - macOS Sonoma 平台",
+  "version": "130.0.6723.117",
+  "stealthMode": true,
+  "telemetryMode": "block",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  "platform": "MacIntel",
+  "vendor": "Google Inc.",
+  "language": "en-US",
+  "languages": ["en-US", "en"],
+  "uaData": {
+    "brands": [
+      { "brand": "Chromium", "version": "130" },
+      { "brand": "Not_A Brand", "version": "24" },
+      { "brand": "Google Chrome", "version": "130" }
+    ],
+    "mobile": false,
+    "platform": "macOS",
+    "architecture": "x86",
+    "bitness": "64",
+    "model": "",
+    "platformVersion": "14.0.0",
+    "fullVersionList": [
+      { "brand": "Chromium", "version": "130.0.6723.117" },
+      { "brand": "Not_A Brand", "version": "24.0.0.0" },
+      { "brand": "Google Chrome", "version": "130.0.6723.117" }
+    ]
+  },
+  "hardwareConcurrency": 8,
+  "deviceMemory": 16,
+  "maxTouchPoints": 0,
+  "screen": {
+    "width": 2560,
+    "height": 1440,
+    "availWidth": 2560,
+    "availHeight": 1415,
+    "colorDepth": 24,
+    "pixelDepth": 24
+  },
+  "webgl": {
+    "vendor": "Google Inc. (Apple)",
+    "renderer": "ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)"
+  },
+  "canvas": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.001
+  },
+  "audio": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.00005
+  },
+  "timezone": "America/Los_Angeles",
+  "timezoneOffset": 480,
+  "geolocation": {
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "accuracy": 100
+  },
+  "connection": {
+    "effectiveType": "4g",
+    "rtt": 35,
+    "downlink": 15
+  },
+  "battery": null,
+  "plugins": [
+    {
+      "name": "PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": "Portable Document Format"
+        }
+      ]
+    },
+    {
+      "name": "Chrome PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "Chromium PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "headers": {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-CH-UA": "\"Chromium\";v=\"130\", \"Not_A Brand\";v=\"24\", \"Google Chrome\";v=\"130\"",
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": "\"macOS\"",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1"
+  },
+  "source": "preset",
+  "createdAt": "2026-04-06T00:00:00.000Z",
+  "updatedAt": "2026-04-06T00:00:00.000Z"
+}

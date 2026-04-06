@@ -85,7 +85,7 @@ export function SystemPage() {
               onChange={(event) =>
                 setSystem((current) => ({
                   ...current,
-                  preferredLandingPage: event.target.value
+                  preferredLandingPage: event.target.value as SystemSettings["preferredLandingPage"]
                 }))
               }
             >

@@ -186,9 +186,20 @@ async function dismissPostRegistrationOnboarding(page: Page): Promise<boolean> {
 }
 
 test("验证已授权目标站点的保护流程", async ({ page, context }, testInfo) => {
-  console.log(
-    `[Run] Starting registration attempt ${testInfo.retry + 1} / ${registrationRetryAttempts + 1}`
-  );
+  const requestedRunCount = Number(process.env.PLATFORM_RUN_COUNT || '1');
+  const currentBatch = testInfo.repeatEachIndex + 1;
+  const currentRetry = testInfo.retry + 1;
+  const maxRetries = registrationRetryAttempts + 1;
+
+  if (requestedRunCount > 1) {
+    console.log(
+      `[执行] 第 ${currentBatch} 批次 / 共 ${requestedRunCount} 批次 · 第 ${currentRetry} 次尝试 / 最多 ${maxRetries} 次`
+    );
+  } else {
+    console.log(
+      `[执行] 第 ${currentRetry} 次尝试 / 最多 ${maxRetries} 次`
+    );
+  }
 
   const summary: OutcomeRecord[] = [];
   const startUrl = getConfiguredStartUrl();

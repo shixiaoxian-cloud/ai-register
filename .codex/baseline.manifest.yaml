@@ -1,0 +1,19 @@
+manifest_version: 1
+skill_name: openspec-shared-baseline
+baseline_version: 2026.04.06
+project_name: ai-register
+sync_strategy: copy-on-sync
+managed_paths:
+- target: docs/baseline/BASELINE_AGENT_RULES.md
+  asset: assets/consumer/docs/baseline/BASELINE_AGENT_RULES.md
+  sha256: 0a93e6296c84358fe4f9f83bc4bea9da9782dafb0bb3c47e3537da57f307c358
+- target: openspec/specs/platform-core/spec.md
+  asset: assets/consumer/openspec/specs/platform-core/spec.md
+  sha256: 190507fe6b197a93bf6872309b7bf0250bc981a0f113faf603df1849fd5adc3b
+- target: openspec/specs/spec-authoring/spec.md
+  asset: assets/consumer/openspec/specs/spec-authoring/spec.md
+  sha256: 299fc9401fe636f51a512082d9aca54a80e45d0b983a27757ec191812d383d52
+overlay_paths:
+- AGENTS.md
+- docs/AGENT_RULES.md
+- openspec/config.yaml

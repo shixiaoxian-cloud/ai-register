@@ -20,7 +20,7 @@
     "captcha": "iframe[title*=\"captcha\"], .g-recaptcha, [data-testid=\"captcha\"]",
     "smsChallenge": "input[name=\"smsCode\"], [data-testid=\"sms-challenge\"]",
     "deviceChallenge": "text=/verify.*device|security check|unusual activity|suspicious login/i",
-    "success": "text=/Ready when you are/i, text=/What brings you to ChatGPT/i, text=/New chat/i, text=/welcome|dashboard|account created|registration complete/i",
+    "success": "text=/Ready when you are/i, text=/What brings you to ChatGPT/i, text=/New chat/i, text=/welcome|dashboard|account created|registration complete/i, text=/create.*workspace|workspace.*name|name.*workspace/i, [data-testid=\"workspace-name-input\"], input[placeholder*=\"workspace\" i]",
     "blocked": "text=/access denied|temporarily blocked|suspicious activity detected|try again later/i",
     "fullName": "input[name=\"name\"], input[aria-label=\"全名\"], input[placeholder=\"全名\"], div._typeableLabelText_18qcl_88:has-text(\"全名\") + input, div._typeableLabelTextPositioner_18qcl_88:has(div._typeableLabelText_18qcl_88:has-text(\"全名\")) input",
     "age": "input[name=\"age\"], input[placeholder=\"Age\"], input[aria-label=\"Age\"], input[placeholder=\"年龄\"], input[aria-label=\"年龄\"]",
@@ -33,8 +33,8 @@
     "enabled": true,
     "mailbox": "INBOX",
     "codePattern": "\\b(\\d{6})\\b",
-    "waitTimeoutMs": 30000,
-    "resendWaitTimeoutMs": 30000,
-    "resendAttempts": 1
+    "waitTimeoutMs": 60000,
+    "resendWaitTimeoutMs": 60000,
+    "resendAttempts": 2
   }
 }

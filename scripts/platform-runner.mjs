@@ -13,6 +13,10 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function stripAnsi(value) {
+  return String(value || "").replace(/\u001b\[[0-9;]*m/g, "");
+}
+
 function createPlatformRunId() {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -64,6 +68,86 @@ function detectLatestStage(logs) {
   }
 
   return null;
+}
+
+function appendEntries(logs, stream, chunk) {
+  const nextLogs = Array.isArray(logs) ? [...logs] : [];
+  const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+  const normalized = text.replace(/\r\n/g, "\n");
+
+  for (const segment of normalized.split("\n")) {
+    if (!segment.trim()) {
+      continue;
+    }
+
+    nextLogs.push({
+      at: nowIso(),
+      stream,
+      text: stripAnsi(segment)
+    });
+  }
+
+  return nextLogs.length > 400 ? nextLogs.slice(nextLogs.length - 400) : nextLogs;
+}
+
+async function isProcessAlive(pid) {
+  const normalizedPid = Number(pid);
+  if (!Number.isInteger(normalizedPid) || normalizedPid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(normalizedPid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function inferRecoveredRunState(record) {
+  const lines = Array.isArray(record.logs)
+    ? record.logs.map((entry) => stripAnsi(entry?.text || ""))
+    : [];
+  const joined = lines.join("\n");
+  const explicitExit = [...joined.matchAll(/测试进程已结束，退出码：(-?\d+)/g)].at(-1);
+
+  if (explicitExit) {
+    const exitCode = Number(explicitExit[1]);
+    return {
+      status: exitCode === 0 ? "passed" : "failed",
+      exitCode,
+      summary:
+        exitCode === 0
+          ? "测试进程已结束，状态已自动回收为通过。"
+          : `测试进程已结束，状态已自动回收为失败（退出码 ${exitCode}）。`
+    };
+  }
+
+  if (/\b\d+\s+passed\b/i.test(joined) && !/\b\d+\s+failed\b/i.test(joined)) {
+    return {
+      status: "passed",
+      exitCode: record.exitCode ?? 0,
+      summary: "检测到测试结果已全部通过，状态已自动回收。"
+    };
+  }
+
+  if (
+    /\b\d+\s+failed\b/i.test(joined) ||
+    /^\s*[✘x]\s+\d+\s+tests[\\/]+protection-validation\.spec\.ts/im.test(joined) ||
+    /(TypeError|ReferenceError|RangeError|SyntaxError|AssertionError|TimeoutError|Error):/i.test(joined)
+  ) {
+    return {
+      status: "failed",
+      exitCode: record.exitCode ?? 1,
+      summary: "检测到测试存在失败输出，状态已自动回收为失败。"
+    };
+  }
+
+  return {
+    status: "stopped",
+    exitCode: record.exitCode ?? null,
+    summary: "运行进程已不存在，状态已自动回收为已停止。"
+  };
 }
 
 function detectRunInsight(run) {
@@ -233,6 +317,15 @@ export function createRunController({
     }
   }
 
+  function refreshDerivedFields(record) {
+    const latestStage = detectLatestStage(record.logs);
+    const insight = detectRunInsight(record);
+    const conclusion = detectRunConclusion(record, latestStage, insight);
+    record.latestStage = latestStage;
+    record.insight = insight;
+    record.conclusion = conclusion;
+  }
+
   function updateRecordFromRunState(record) {
     const latestStage = detectLatestStage(runState.logs);
     const insight = detectRunInsight(runState);
@@ -253,28 +346,16 @@ export function createRunController({
   }
 
   function appendLog(stream, chunk) {
-    const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
-    const normalized = text.replace(/\r\n/g, "\n");
-
-    for (const segment of normalized.split("\n")) {
-      if (!segment.trim()) {
-        continue;
-      }
-
-      runState.logs.push({
-        at: nowIso(),
-        stream,
-        text: segment
-      });
-    }
-
-    if (runState.logs.length > 400) {
-      runState.logs = runState.logs.slice(runState.logs.length - 400);
-    }
+    runState.logs = appendEntries(runState.logs, stream, chunk);
 
     if (activeRecord) {
       updateRecordFromRunState(activeRecord);
     }
+  }
+
+  function appendRecordLog(record, stream, chunk) {
+    record.logs = appendEntries(record.logs, stream, chunk);
+    refreshDerivedFields(record);
   }
 
   function getRunSnapshot() {
@@ -295,6 +376,7 @@ export function createRunController({
 
   async function listRuns() {
     await ensureHistoryLoaded();
+    await reconcileInFlightRuns();
     if (activeRecord) {
       updateRecordFromRunState(activeRecord);
     }
@@ -306,6 +388,7 @@ export function createRunController({
 
   async function getRunById(runId) {
     await ensureHistoryLoaded();
+    await reconcileInFlightRuns();
     if (activeRecord?.id === runId) {
       updateRecordFromRunState(activeRecord);
       return activeRecord;
@@ -321,8 +404,12 @@ export function createRunController({
 
   async function startRun(options) {
     await ensureHistoryLoaded();
+    await reconcileInFlightRuns();
 
-    if (currentChild) {
+    if (
+      currentChild ||
+      runHistory.some((record) => record.status === "running" || record.status === "stopping")
+    ) {
       throw new Error("当前已有测试任务正在运行，请等待结束或先停止它。");
     }
 
@@ -507,6 +594,7 @@ export function createRunController({
 
   async function stopRun() {
     await ensureHistoryLoaded();
+    await reconcileInFlightRuns();
 
     if (!currentChild) {
       throw new Error("当前没有正在运行的测试任务。");
@@ -538,6 +626,40 @@ export function createRunController({
   async function listArtifacts(filter = {}) {
     await ensureHistoryLoaded();
     return listStoredArtifacts(filter);
+  }
+
+  async function reconcileInFlightRuns() {
+    await ensureHistoryLoaded();
+    let changed = false;
+
+    for (const record of runHistory) {
+      if (record.status !== "running" && record.status !== "stopping") {
+        continue;
+      }
+
+      if (activeRecord?.id === record.id && currentChild) {
+        updateRecordFromRunState(activeRecord);
+        continue;
+      }
+
+      const alive = await isProcessAlive(record.pid);
+      if (alive) {
+        continue;
+      }
+
+      const recovered = inferRecoveredRunState(record);
+      record.status = recovered.status;
+      record.exitCode = recovered.exitCode;
+      record.finishedAt = record.finishedAt || nowIso();
+      record.summary = recovered.summary;
+      record.pid = null;
+      appendRecordLog(record, "system", `检测到运行进程已不存在，任务状态已自动回收为${recovered.status}。`);
+      changed = true;
+    }
+
+    if (changed) {
+      await persistHistory();
+    }
   }
 
   return {

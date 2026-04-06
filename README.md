@@ -38,12 +38,12 @@ npm run pw:install
 
 ## 2. 配置
 
-1. 复制 `.env.example` 为 `.env`
+1. 首次使用前运行 `npm run console:build`
 2. 运行 `npm run config:ui`
 3. 在浏览器打开 `http://127.0.0.1:3200`
-4. 通过中文配置页保存一个完整的 `https://` 测试站点地址
-5. 在前端直接选择运行模式并点击”开始测试”
-6. 在 [src/target.profile.ts](/e:/shichenwei/ai-register/src/target.profile.ts) 中补充字段选择器和期望结果
+4. 在新版平台控制台的 `Config Center` 中配置站点、测试方案、目标画像和邮箱配置
+5. 在 `Runs` 工作区选择测试方案并启动运行
+6. 开发前端时可运行 `npm run dev`，再访问 `http://127.0.0.1:5173` 使用 Vite 热重载
 
 ### Token 保存配置（可选）
 
@@ -75,15 +75,16 @@ TOKEN_OUTPUT_DIR=./output_tokens
 - 如果你想手动指定，可在 `.env` 中设置 `LOCAL_BROWSER_NAME=chrome|msedge`
 - 如果你想指定精确路径，可设置 `BROWSER_EXECUTABLE_PATH`
 
-测试入口地址现在由前端配置页管理，底层保存到 [config/target-site.json](/e:/shichenwei/ai-register/config/target-site.json)。Playwright 运行时会自动读取这份配置，并强制校验为 `https://` 地址。
+测试入口、方案、画像和邮箱配置现在由新版平台控制台管理，并持久化到本地 SQLite 平台库。旧的 `config/*.json` 文件只作为迁移导入来源或运行时兼容输入，不再是控制台读写的长期真源。
 
-配置页现在还支持：
+新版平台控制台现在支持：
 
-- 前端直接启动 `Playwright` 测试
+- 在 `Runs` 工作区直接启动 `Playwright` 测试
 - 切换无头 / 可视运行模式
-- 查看实时日志
+- 查看运行阶段、人工介入提示和日志
 - 停止当前测试任务
-- 直接打开 [playwright-report/index.html](/e:/shichenwei/ai-register/playwright-report/index.html) 报告
+- 通过 `Artifacts` 工作区浏览报告、trace、媒体和 token 产物
+- 按任务下载归档产物包
 
 `expectedOutcomes` 的典型配置：
 
@@ -92,7 +93,7 @@ TOKEN_OUTPUT_DIR=./output_tokens
 
 ## 3. 运行
 
-推荐通过前端配置页直接运行测试。
+推荐通过平台控制台的 `Runs` 工作区直接运行测试。
 
 如果你仍然想用命令行，也可以：
 
@@ -141,4 +142,4 @@ npm run test:ui
 - [文档索引](docs/README.md) - 完整文档列表
 - [快速索引](docs/INDEX.md) - 按主题/角色查找
 - [项目架构](docs/ARCHITECTURE.md) - 系统架构设计
-- [项目结构](PROJECT-STRUCTURE.md) - 目录组织说明
+- [项目结构](docs/PROJECT-STRUCTURE.md) - 目录组织说明

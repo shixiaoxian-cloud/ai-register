@@ -64,10 +64,12 @@ export interface MailConfigResource {
   updatedAt?: string;
 }
 
+export type PreferredLandingPage = "overview" | "runs" | "config";
+
 export interface SystemSettings {
   defaultRunMode: RunMode;
   continueAfterProtectedChallenge: boolean;
-  preferredLandingPage: string;
+  preferredLandingPage: PreferredLandingPage;
   notes: string;
   updatedAt?: string;
 }
@@ -182,6 +184,14 @@ export interface TaskRecord {
   artifacts?: ArtifactSummary;
 }
 
+export interface TaskMutation {
+  id?: string;
+  name: string;
+  status: TaskRecord["status"];
+  sourceKind?: string;
+  sourceRef?: string;
+}
+
 export interface ArtifactSummary {
   token: number;
   report: number;
@@ -195,7 +205,7 @@ export interface CaseRecord {
   taskId: string;
   name: string;
   sequence: number;
-  status: 'pending' | 'running' | 'retrying' | 'success' | 'failed';
+  status: 'pending' | 'running' | 'retrying' | 'success' | 'failed' | 'stopped';
   sourceKind: string;
   sourceRef: string;
   startedAt?: string;
@@ -250,6 +260,7 @@ export interface ArtifactEntry {
   runId: string | null;
   taskId?: string | null;
   caseId?: string | null;
+  isSensitive?: boolean;
   contentType?: string;
   storageKind?: string;
 }

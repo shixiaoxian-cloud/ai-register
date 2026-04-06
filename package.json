@@ -4,6 +4,7 @@
   "private": true,
   "description": "Playwright harness for validating authorized third-party protection journeys without bypassing them.",
   "scripts": {
+    "dev": "node ./scripts/dev.mjs",
     "config:ui": "node ./scripts/config-server.mjs",
     "console:dev": "vite --config frontend/vite.config.ts",
     "console:build": "vite build --config frontend/vite.config.ts",
@@ -19,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "debug:tempmail": "node scripts/debug-tempmail.js",
     "debug:api": "bash scripts/verify-tempmail-api.sh",
-    "debug:test": "playwright test tests/debug-tempmail.spec.ts"
+    "debug:test": "playwright test tests/debug-tempmail.spec.ts",
+    "aggregate": "node scripts/aggregate-sub2api.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

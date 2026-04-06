@@ -1,0 +1,125 @@
+{
+  "id": "preset_edge_130_win11",
+  "name": "Edge 130 (Windows 11)",
+  "description": "标准 Microsoft Edge 130 浏览器指纹 - Windows 11 平台",
+  "version": "130.0.2849.68",
+  "stealthMode": true,
+  "telemetryMode": "block",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.2849.68",
+  "platform": "Win32",
+  "vendor": "Google Inc.",
+  "language": "en-US",
+  "languages": ["en-US", "en"],
+  "uaData": {
+    "brands": [
+      { "brand": "Chromium", "version": "130" },
+      { "brand": "Microsoft Edge", "version": "130" },
+      { "brand": "Not?A_Brand", "version": "99" }
+    ],
+    "mobile": false,
+    "platform": "Windows",
+    "architecture": "x86",
+    "bitness": "64",
+    "model": "",
+    "platformVersion": "15.0.0",
+    "fullVersionList": [
+      { "brand": "Chromium", "version": "130.0.6723.117" },
+      { "brand": "Microsoft Edge", "version": "130.0.2849.68" },
+      { "brand": "Not?A_Brand", "version": "99.0.0.0" }
+    ]
+  },
+  "hardwareConcurrency": 8,
+  "deviceMemory": 8,
+  "maxTouchPoints": 0,
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "colorDepth": 24,
+    "pixelDepth": 24
+  },
+  "webgl": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E9B) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "canvas": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.001
+  },
+  "audio": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.00005
+  },
+  "timezone": "America/New_York",
+  "timezoneOffset": 300,
+  "geolocation": {
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "accuracy": 100
+  },
+  "connection": {
+    "effectiveType": "4g",
+    "rtt": 45,
+    "downlink": 12
+  },
+  "battery": {
+    "charging": false,
+    "level": 0.85,
+    "chargingTime": null,
+    "dischargingTime": 18000
+  },
+  "plugins": [
+    {
+      "name": "PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": "Portable Document Format"
+        }
+      ]
+    },
+    {
+      "name": "Chrome PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "Chromium PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "headers": {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-CH-UA": "\"Chromium\";v=\"130\", \"Microsoft Edge\";v=\"130\", \"Not?A_Brand\";v=\"99\"",
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": "\"Windows\"",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1"
+  },
+  "source": "preset",
+  "createdAt": "2026-04-06T00:00:00.000Z",
+  "updatedAt": "2026-04-06T00:00:00.000Z"
+}

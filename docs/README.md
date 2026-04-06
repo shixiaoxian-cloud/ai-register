@@ -22,6 +22,7 @@
 ## 主要文档索引
 
 ### 使用指南
+- [前端热重载开发](guides/dev-hot-reload.md) - 新版控制台开发模式和生产入口
 - [Chrome 设置指南](guides/chrome-setup.md)
 - [临时邮箱使用指南](guides/temp-mail.md)
 - [前端临时邮箱集成](guides/frontend-tempmail.md)
@@ -34,6 +35,7 @@
 - [日志查看器指南](guides/log-viewer.md)
 - [快速参考](guides/quick-reference.md)
 - [Token 提取指南](guides/token-extraction.md)
+- [Sub2Api 文件聚合](guides/sub2api-aggregation.md)
 
 ### 故障排除
 - [403 错误诊断](troubleshooting/403-diagnosis.md)
@@ -50,7 +52,7 @@
 
 ### 实现总结
 - [ai-pm × OpenSpec 联合工作流](implementation/ai-pm-openspec-joint-workflow.md)
-- [平台控制台基础实现](implementation/platform-console-foundation.md)
+- [平台控制台基础实现](implementation/platform-console-foundation.md) - React/Vite 控制台、SQLite 平台资源、Runs 与 Artifacts 工作区
 - [自动化功能总结](implementation/automation-summary.md)
 - [验证码自动化](implementation/auto-verification-code.md)
 - [验证码更新](implementation/verification-code-update.md)
@@ -68,6 +70,10 @@
 - [Token 保存实现](implementation/token-save-implementation.md)
 - [功能实现完成](implementation/implementation-complete.md)
 - [实现报告](implementation/IMPLEMENTATION-REPORT.md)
+- [工作区名称自动填写](implementation/workspace-name-auto-fill.md)
+- [注册后处理模块化重构](implementation/refactor-post-registration-handler.md)
+- [Sub2Api 文件聚合实现](implementation/sub2api-aggregation-implementation.md)
+- [Sub2Api 文件聚合完成](implementation/sub2api-aggregation-complete.md)
 
 ### 技术分析
 - [反检测策略](analysis/anti-detection.md)
@@ -84,8 +90,9 @@
 ### 新手入门
 1. 阅读 [README.md](../README.md) 了解项目概况
 2. 查看 [ARCHITECTURE.md](ARCHITECTURE.md) 理解系统架构
-3. 参考 [Chrome 设置指南](guides/chrome-setup.md) 配置环境
-4. 遇到问题查看 [常见问题](troubleshooting/general.md)
+3. 参考 [平台控制台基础实现](implementation/platform-console-foundation.md) 理解新版入口与 SQLite 真源
+4. 参考 [前端热重载开发](guides/dev-hot-reload.md) 启动开发或生产控制台
+5. 遇到问题查看 [常见问题](troubleshooting/general.md)
 
 ### 开发者
 1. 阅读 [ARCHITECTURE.md](ARCHITECTURE.md) 了解架构设计
@@ -99,9 +106,9 @@
 
 ## 文档统计
 
-- 使用指南：12 篇
+- 使用指南：13 篇
 - 故障排除：11 篇
-- 实现总结：19 篇
+- 实现总结：21 篇
 - 技术分析：8 篇
-- **总计：50 篇技术文档**
+- **总计：53 篇技术文档**
 - 另含产品协作工作区：`00_MEMORY/`、`01_STRATEGY/`、`02_PRD/`、`03_DESIGN/`、`04_RESOURCES/`

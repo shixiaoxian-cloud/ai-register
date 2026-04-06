@@ -120,6 +120,12 @@ function getPathSegments(pathname) {
   return pathname.split("/").filter(Boolean);
 }
 
+function buildAttachmentFileName(input, fallback = "artifact.bin") {
+  const candidate = path.basename(String(input || "").trim()) || fallback;
+  const sanitized = candidate.replace(/[^\w.\-()]/g, "_").slice(0, 120);
+  return sanitized || fallback;
+}
+
 async function handlePlatformApi(request, response, requestUrl) {
   const segments = getPathSegments(requestUrl.pathname);
   if (segments[0] !== "api" || segments[1] !== "platform") {
@@ -189,15 +195,34 @@ async function handlePlatformApi(request, response, requestUrl) {
     }
 
     if (resource === "plans") {
+      if (request.method === "GET" && resourceId) {
+        const state = await store.readState();
+        const plan = state.plans.find((record) => record.id === resourceId);
+
+        if (!plan) {
+          jsonResponse(response, 404, { ok: false, message: "测试方案不存在。" });
+          return true;
+        }
+
+        jsonResponse(response, 200, { ok: true, plan });
+        return true;
+      }
+
       if (request.method === "GET") {
         const state = await store.readState();
         jsonResponse(response, 200, { ok: true, plans: state.plans });
         return true;
       }
 
-      const bodyText = await readBody(request);
-      const payload = JSON.parse(bodyText || "{}");
+      if (request.method === "DELETE" && resourceId) {
+        const plan = await store.deletePlan(resourceId);
+        jsonResponse(response, 200, { ok: true, plan });
+        return true;
+      }
+
       if (request.method === "POST" || request.method === "PUT") {
+        const bodyText = await readBody(request);
+        const payload = JSON.parse(bodyText || "{}");
         const plan = await store.savePlan({
           ...payload,
           id: request.method === "PUT" ? resourceId : payload.id
@@ -208,15 +233,34 @@ async function handlePlatformApi(request, response, requestUrl) {
     }
 
     if (resource === "profiles") {
+      if (request.method === "GET" && resourceId) {
+        const state = await store.readState();
+        const profile = state.profiles.find((record) => record.id === resourceId);
+
+        if (!profile) {
+          jsonResponse(response, 404, { ok: false, message: "画像配置不存在。" });
+          return true;
+        }
+
+        jsonResponse(response, 200, { ok: true, profile });
+        return true;
+      }
+
       if (request.method === "GET") {
         const state = await store.readState();
         jsonResponse(response, 200, { ok: true, profiles: state.profiles });
         return true;
       }
 
-      const bodyText = await readBody(request);
-      const payload = JSON.parse(bodyText || "{}");
+      if (request.method === "DELETE" && resourceId) {
+        const profile = await store.deleteProfile(resourceId);
+        jsonResponse(response, 200, { ok: true, profile });
+        return true;
+      }
+
       if (request.method === "POST" || request.method === "PUT") {
+        const bodyText = await readBody(request);
+        const payload = JSON.parse(bodyText || "{}");
         const profile = await store.saveProfile({
           ...payload,
           id: request.method === "PUT" ? resourceId : payload.id
@@ -227,6 +271,19 @@ async function handlePlatformApi(request, response, requestUrl) {
     }
 
     if (resource === "mail-configs") {
+      if (request.method === "GET" && resourceId) {
+        const state = await store.readState();
+        const mailConfig = state.mailConfigs.find((record) => record.id === resourceId);
+
+        if (!mailConfig) {
+          jsonResponse(response, 404, { ok: false, message: "邮箱配置不存在。" });
+          return true;
+        }
+
+        jsonResponse(response, 200, { ok: true, mailConfig });
+        return true;
+      }
+
       if (request.method === "GET") {
         const state = await store.readState();
         jsonResponse(response, 200, { ok: true, mailConfigs: state.mailConfigs });
@@ -236,6 +293,12 @@ async function handlePlatformApi(request, response, requestUrl) {
       if (request.method === "POST" && extraSegment === "test") {
         const result = await store.testMailConfigConnection(resourceId);
         jsonResponse(response, 200, { ok: true, result });
+        return true;
+      }
+
+      if (request.method === "DELETE" && resourceId) {
+        const mailConfig = await store.deleteMailConfig(resourceId);
+        jsonResponse(response, 200, { ok: true, mailConfig });
         return true;
       }
 
@@ -292,21 +355,51 @@ async function handlePlatformApi(request, response, requestUrl) {
       }
     }
 
-    if (resource === "tasks" && request.method === "GET") {
-      if (resourceId && extraSegment === "download") {
-        const bundle = await store.buildTaskDownloadBundle(resourceId);
-        response.writeHead(200, {
-          "Content-Type": bundle.contentType,
-          "Content-Disposition": `attachment; filename="${bundle.fileName}"`,
-          "Cache-Control": "no-store"
-        });
-        response.end(bundle.buffer);
+    if (resource === "tasks") {
+      if (request.method === "GET") {
+        if (resourceId && extraSegment === "download") {
+          const bundle = await store.buildTaskDownloadBundle(resourceId);
+          response.writeHead(200, {
+            "Content-Type": bundle.contentType,
+            "Content-Disposition": `attachment; filename="${bundle.fileName}"`,
+            "Cache-Control": "no-store"
+          });
+          response.end(bundle.buffer);
+          return true;
+        }
+
+        if (resourceId && extraSegment === "download-sub2api") {
+          const bundle = await store.buildTaskSub2ApiBundle(resourceId);
+          response.writeHead(200, {
+            "Content-Type": bundle.contentType,
+            "Content-Disposition": `attachment; filename="${bundle.fileName}"`,
+            "Cache-Control": "no-store"
+          });
+          response.end(bundle.buffer);
+          return true;
+        }
+
+        const tasks = await store.listTasks();
+        jsonResponse(response, 200, { ok: true, tasks });
         return true;
       }
 
-      const tasks = await store.listTasks();
-      jsonResponse(response, 200, { ok: true, tasks });
-      return true;
+      if (request.method === "DELETE" && resourceId) {
+        const task = await store.deleteTask(resourceId);
+        jsonResponse(response, 200, { ok: true, task });
+        return true;
+      }
+
+      if (request.method === "POST" || request.method === "PUT") {
+        const bodyText = await readBody(request);
+        const payload = JSON.parse(bodyText || "{}");
+        const task = await store.saveTask({
+          ...payload,
+          id: request.method === "PUT" ? resourceId : payload.id
+        });
+        jsonResponse(response, 200, { ok: true, task });
+        return true;
+      }
     }
 
     if (resource === "cases" && request.method === "GET") {
@@ -470,10 +563,18 @@ export function createConfigServer() {
         return;
       }
 
-      response.writeHead(200, {
+      const responseHeaders = {
         "Content-Type": storedArtifact.contentType || "application/octet-stream",
-        "Cache-Control": "no-store"
-      });
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
+      };
+
+      if (storedArtifact.type === "token" || storedArtifact.isSensitive) {
+        responseHeaders["Content-Disposition"] =
+          `attachment; filename="${buildAttachmentFileName(storedArtifact.relPath || storedArtifact.name, "token.json")}"`;
+      }
+
+      response.writeHead(200, responseHeaders);
       response.end(storedArtifact.contentBuffer);
       return;
     }
@@ -484,10 +585,18 @@ export function createConfigServer() {
       const storedArtifact = await store.getArtifactContent(bucket, relativePath);
 
       if (storedArtifact) {
-        response.writeHead(200, {
+        const responseHeaders = {
           "Content-Type": storedArtifact.contentType || getContentType(relativePath),
-          "Cache-Control": "no-store"
-        });
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff"
+        };
+
+        if (bucket === "tokens") {
+          responseHeaders["Content-Disposition"] =
+            `attachment; filename="${buildAttachmentFileName(relativePath, "token.json")}"`;
+        }
+
+        response.writeHead(200, responseHeaders);
         response.end(storedArtifact.contentBuffer);
         return;
       }

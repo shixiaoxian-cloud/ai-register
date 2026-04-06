@@ -188,6 +188,21 @@ export function ConfigCenterPage() {
   const siteStatusTone = siteDraft.startUrl ? "success" : "warning";
   const siteStatusLabel = siteDraft.startUrl ? "可运行" : "待补充地址";
   const canDeleteSite = Boolean(siteDraft.id) && selectedSitePlans.length === 0;
+  const selectedProfilePlans = profileDraft.id
+    ? (platformState?.plans || []).filter((plan) => plan.profileId === profileDraft.id)
+    : [];
+  const selectedMailConfigPlans = mailDraft.id
+    ? (platformState?.plans || []).filter((plan) => plan.mailConfigId === mailDraft.id)
+    : [];
+  const canDeletePlan = Boolean(planDraft.id) && (platformState?.plans.length ?? 0) > 1;
+  const canDeleteProfile =
+    Boolean(profileDraft.id) &&
+    selectedProfilePlans.length === 0 &&
+    (platformState?.profiles.length ?? 0) > 1;
+  const canDeleteMailConfig =
+    Boolean(mailDraft.id) &&
+    selectedMailConfigPlans.length === 0 &&
+    (platformState?.mailConfigs.length ?? 0) > 1;
 
   function applyLoadedState(
     nextState: {
@@ -358,6 +373,29 @@ export function ConfigCenterPage() {
     }
   }
 
+  async function handlePlanDelete() {
+    try {
+      if (!planDraft.id) {
+        throw new Error("请先选择一个已保存的方案。");
+      }
+
+      const confirmed = window.confirm(
+        `确认删除方案“${planDraft.name || "未命名方案"}”吗？此操作不可撤销。`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const deletedPlan = await api.deletePlan(planDraft.id);
+      await reloadState({ planId: "" });
+      setSuccess(`测试方案“${deletedPlan.name || "未命名方案"}”已删除。`);
+      setMessage("");
+    } catch (error) {
+      setSuccess("");
+      setMessage(error instanceof Error ? error.message : "删除方案失败。");
+    }
+  }
+
   async function handleProfileSave() {
     try {
       const savedProfile = await api.saveProfile(editorToProfile(profileDraft));
@@ -371,6 +409,35 @@ export function ConfigCenterPage() {
     }
   }
 
+  async function handleProfileDelete() {
+    try {
+      if (!profileDraft.id) {
+        throw new Error("请先选择一个已保存的画像。");
+      }
+
+      if (selectedProfilePlans.length) {
+        throw new Error(
+          `当前画像仍关联 ${selectedProfilePlans.length} 个方案，请先调整这些方案：${summarizePlanNames(selectedProfilePlans)}`
+        );
+      }
+
+      const confirmed = window.confirm(
+        `确认删除画像“${profileDraft.name || "未命名画像"}”吗？此操作不可撤销。`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const deletedProfile = await api.deleteProfile(profileDraft.id);
+      await reloadState({ profileId: "" });
+      setSuccess(`画像配置“${deletedProfile.name || "未命名画像"}”已删除。`);
+      setMessage("");
+    } catch (error) {
+      setSuccess("");
+      setMessage(error instanceof Error ? error.message : "删除画像失败。");
+    }
+  }
+
   async function handleMailSave() {
     try {
       const savedMail = await api.saveMailConfig(mailDraft);
@@ -381,6 +448,35 @@ export function ConfigCenterPage() {
     } catch (error) {
       setSuccess("");
       setMessage(error instanceof Error ? error.message : "保存邮箱配置失败。");
+    }
+  }
+
+  async function handleMailDelete() {
+    try {
+      if (!mailDraft.id) {
+        throw new Error("请先选择一个已保存的邮箱配置。");
+      }
+
+      if (selectedMailConfigPlans.length) {
+        throw new Error(
+          `当前邮箱配置仍关联 ${selectedMailConfigPlans.length} 个方案，请先调整这些方案：${summarizePlanNames(selectedMailConfigPlans)}`
+        );
+      }
+
+      const confirmed = window.confirm(
+        `确认删除邮箱配置“${mailDraft.name || "未命名邮箱配置"}”吗？此操作不可撤销。`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const deletedMailConfig = await api.deleteMailConfig(mailDraft.id);
+      await reloadState({ mailConfigId: "" });
+      setSuccess(`邮箱配置“${deletedMailConfig.name || "未命名邮箱配置"}”已删除。`);
+      setMessage("");
+    } catch (error) {
+      setSuccess("");
+      setMessage(error instanceof Error ? error.message : "删除邮箱配置失败。");
     }
   }
 
@@ -565,13 +661,16 @@ export function ConfigCenterPage() {
                   type="button"
                   className="ghost-button"
                   onClick={() =>
-                    setPlanDraft(
-                      emptyPlanDraft({
-                        siteId: platformState?.selectedSiteId,
-                        profileId: platformState?.selectedProfileId,
-                        mailConfigId: platformState?.selectedMailConfigId
-                      })
-                    )
+                    {
+                      setSelectedPlanId("");
+                      setPlanDraft(
+                        emptyPlanDraft({
+                          siteId: platformState?.selectedSiteId,
+                          profileId: platformState?.selectedProfileId,
+                          mailConfigId: platformState?.selectedMailConfigId
+                        })
+                      );
+                    }
                   }
                 >
                   新建方案
@@ -688,9 +787,20 @@ export function ConfigCenterPage() {
                   }
                 />
               </label>
+              <p className="empty-copy">
+                删除方案会保留历史运行快照，但当前平台至少需要保留 1 套方案。
+              </p>
               <div className="toolbar-row">
                 <button type="button" className="accent-button" onClick={handlePlanSave}>
                   保存方案
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={handlePlanDelete}
+                  disabled={!canDeletePlan}
+                >
+                  删除方案
                 </button>
               </div>
             </SectionCard>
@@ -706,7 +816,10 @@ export function ConfigCenterPage() {
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setProfileDraft(profileToEditor())}
+                  onClick={() => {
+                    setSelectedProfileId("");
+                    setProfileDraft(profileToEditor());
+                  }}
                 >
                   新建画像
                 </button>
@@ -842,9 +955,22 @@ export function ConfigCenterPage() {
                   }
                 />
               </label>
+              <p className="empty-copy">
+                画像删除前需要先解除所有方案关联。当前{selectedProfilePlans.length
+                  ? `已关联 ${selectedProfilePlans.length} 个方案`
+                  : "没有方案依赖"}。
+              </p>
               <div className="toolbar-row">
                 <button type="button" className="accent-button" onClick={handleProfileSave}>
                   保存画像
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={handleProfileDelete}
+                  disabled={!canDeleteProfile}
+                >
+                  删除画像
                 </button>
               </div>
             </SectionCard>
@@ -860,7 +986,10 @@ export function ConfigCenterPage() {
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setMailDraft(emptyMailDraft())}
+                  onClick={() => {
+                    setSelectedMailConfigId("");
+                    setMailDraft(emptyMailDraft());
+                  }}
                 >
                   新建邮箱配置
                 </button>
@@ -999,12 +1128,25 @@ export function ConfigCenterPage() {
                   }
                 />
               </label>
+              <p className="empty-copy">
+                邮箱配置删除前需要先解除所有方案关联。当前{selectedMailConfigPlans.length
+                  ? `已关联 ${selectedMailConfigPlans.length} 个方案`
+                  : "没有方案依赖"}。
+              </p>
               <div className="toolbar-row">
                 <button type="button" className="accent-button" onClick={handleMailSave}>
                   保存邮箱配置
                 </button>
                 <button type="button" className="ghost-button" onClick={handleMailTest}>
                   测试连接
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={handleMailDelete}
+                  disabled={!canDeleteMailConfig}
+                >
+                  删除邮箱配置
                 </button>
               </div>
             </SectionCard>

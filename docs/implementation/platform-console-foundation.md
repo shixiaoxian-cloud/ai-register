@@ -18,6 +18,7 @@
   - `Artifacts`
   - `System`
 - 新增共享视觉基线和后台式布局，替代原先的独立工具页风格。
+- 主导航使用 `/runs` 作为运行中心入口；旧 `/tasks` 路由保留为兼容入口，但不再作为主导航工作区。
 
 ### 2. 平台资源模型
 
@@ -29,6 +30,8 @@
 - 通过 `config/platform.sqlite` 作为本地 SQLite 持久化真源。
 - 首次启动会优先导入已有的 `config/platform-state.json`；若该文件不存在，再从旧的 `config/target-site.json`、`config/temp-mail.json` 和 `config/target-profile.json` 引导初始化。
 - 迁移完成后，运行时直接从 SQLite 读取活动方案、站点、画像和邮箱配置，不再把状态写回旧 JSON / `.env`。
+- 资源编辑支持创建、更新和受保护删除：站点、画像、邮箱配置在仍被方案引用时会阻止删除，平台也会保留至少一条可用方案、画像和邮箱配置。
+- 服务端会在资源保存阶段检查绕过式配置描述，拒绝超出安全边界的 CAPTCHA、短信、设备挑战或指纹伪装相关配置输入。
 
 ### 3. 兼容旧执行引擎
 
@@ -48,6 +51,8 @@
   - 资源管理接口
   - 运行记录接口
   - 结果产物接口
+  - 任务级产物下载接口
+- token 类型产物在列表中只暴露元数据；直接访问对应产物时使用附件响应头，避免浏览器默认内联展示敏感内容。
 
 ### 5. 运行与产物追踪
 
@@ -75,6 +80,7 @@ npm run console:typecheck
 - `npm run console:dev`：启动 Vite 前端开发服务器。
 - `npm run console:build`：构建新的平台控制台。
 - `npm run console:typecheck`：仅检查新前端工程的 TypeScript 类型。
+- `npm run dev`：同时启动本地 API 服务和 Vite 开发服务器，适合前端热重载开发。
 
 ## 入口策略
 

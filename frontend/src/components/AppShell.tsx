@@ -1,9 +1,21 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-const navItems = [
+const navItems: Array<{
+  to: string;
+  label: string;
+  meta: string;
+  icon: string;
+  aliases?: string[];
+}> = [
   { to: "/", label: "仪表盘", meta: "平台概览与健康", icon: "overview" },
   { to: "/config", label: "配置中心", meta: "站点、方案与画像", icon: "config" },
-  { to: "/tasks", label: "任务中心", meta: "执行、进度与产物", icon: "runs" },
+  {
+    to: "/runs",
+    label: "运行中心",
+    meta: "执行、日志与人工介入",
+    icon: "runs",
+    aliases: ["/tasks"]
+  },
   { to: "/artifacts", label: "产物中心", meta: "报告、Trace 与令牌", icon: "artifacts" },
   { to: "/system", label: "系统设置", meta: "偏好、入口与说明", icon: "system" }
 ];
@@ -12,7 +24,10 @@ export function AppShell() {
   const location = useLocation();
   const activeItem =
     navItems.find((item) =>
-      item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)
+      item.to === "/"
+        ? location.pathname === "/"
+        : location.pathname.startsWith(item.to) ||
+          item.aliases?.some((alias) => location.pathname.startsWith(alias))
     ) || navItems[0];
 
   return (

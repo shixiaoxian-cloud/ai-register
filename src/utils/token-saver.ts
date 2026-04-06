@@ -306,7 +306,7 @@ export async function saveTokenToFile(
 }
 
 /**
- * 保存 token 到多种格式
+ * 保存 token（只保存 CPA 格式）
  */
 export async function saveTokenToMultipleFormats(
   tokenData: TokenData,
@@ -314,16 +314,12 @@ export async function saveTokenToMultipleFormats(
   options: TokenSaveOptions = {}
 ): Promise<{ cpa: string | null; sub2api: string | null }> {
   const cpaDir = path.join(baseOutputDir, 'cpa');
-  const sub2apiDir = path.join(baseOutputDir, 'sub2api');
 
+  // 只保存 CPA 格式，不再自动生成 sub2api 格式
   const cpaPath = await saveTokenToFile(tokenData, cpaDir, 'cpa', options);
-  // 只要有 access_token 就保存 Sub2Api 格式
-  const sub2apiPath = tokenData.accessToken
-    ? await saveTokenToFile(tokenData, sub2apiDir, 'sub2api', options)
-    : null;
 
   return {
     cpa: cpaPath,
-    sub2api: sub2apiPath
+    sub2api: null  // 不再自动保存 sub2api 格式
   };
 }

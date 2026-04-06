@@ -1,0 +1,125 @@
+{
+  "id": "preset_chrome_131_win11",
+  "name": "Chrome 131 (Windows 11)",
+  "description": "标准 Chrome 131 浏览器指纹 - Windows 11 平台",
+  "version": "131.0.6778.86",
+  "stealthMode": true,
+  "telemetryMode": "block",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "platform": "Win32",
+  "vendor": "Google Inc.",
+  "language": "en-US",
+  "languages": ["en-US", "en"],
+  "uaData": {
+    "brands": [
+      { "brand": "Chromium", "version": "131" },
+      { "brand": "Not_A Brand", "version": "24" },
+      { "brand": "Google Chrome", "version": "131" }
+    ],
+    "mobile": false,
+    "platform": "Windows",
+    "architecture": "x86",
+    "bitness": "64",
+    "model": "",
+    "platformVersion": "15.0.0",
+    "fullVersionList": [
+      { "brand": "Chromium", "version": "131.0.6778.86" },
+      { "brand": "Not_A Brand", "version": "24.0.0.0" },
+      { "brand": "Google Chrome", "version": "131.0.6778.86" }
+    ]
+  },
+  "hardwareConcurrency": 8,
+  "deviceMemory": 8,
+  "maxTouchPoints": 0,
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "colorDepth": 24,
+    "pixelDepth": 24
+  },
+  "webgl": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E9B) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "canvas": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.001
+  },
+  "audio": {
+    "noiseEnabled": true,
+    "noiseLevel": 0.00005
+  },
+  "timezone": "America/Los_Angeles",
+  "timezoneOffset": 480,
+  "geolocation": {
+    "latitude": 34.0522,
+    "longitude": -118.2437,
+    "accuracy": 100
+  },
+  "connection": {
+    "effectiveType": "4g",
+    "rtt": 50,
+    "downlink": 10
+  },
+  "battery": {
+    "charging": true,
+    "level": 0.98,
+    "chargingTime": 0,
+    "dischargingTime": null
+  },
+  "plugins": [
+    {
+      "name": "PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": "Portable Document Format"
+        }
+      ]
+    },
+    {
+      "name": "Chrome PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "Chromium PDF Viewer",
+      "description": "Portable Document Format",
+      "filename": "internal-pdf-viewer",
+      "mimeTypes": [
+        {
+          "type": "application/pdf",
+          "suffixes": "pdf",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "headers": {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-CH-UA": "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\", \"Google Chrome\";v=\"131\"",
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": "\"Windows\"",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1"
+  },
+  "source": "preset",
+  "createdAt": "2026-04-06T00:00:00.000Z",
+  "updatedAt": "2026-04-06T00:00:00.000Z"
+}
