@@ -21,6 +21,7 @@ interface PlanRow {
   site_id?: string;
   profile_id?: string;
   mail_config_id?: string | null;
+  browser_environment_config_id?: string | null;
   run_mode?: string;
   continue_after_protected_challenge?: number;
   created_at?: string;
@@ -74,6 +75,31 @@ interface SystemRow {
   updated_at?: string;
 }
 
+interface BrowserEnvironmentConfigRow {
+  id: string;
+  name?: string;
+  description?: string;
+  source_type?: string;
+  source_label?: string;
+  approval_status?: string;
+  approved_by?: string;
+  approved_at?: string;
+  approval_note?: string;
+  browser_name?: string;
+  browser_version?: string;
+  platform?: string;
+  user_agent?: string;
+  user_agent_metadata_json?: string;
+  locale?: string;
+  languages_json?: string;
+  timezone?: string;
+  viewport_json?: string;
+  screen_json?: string;
+  geolocation_json?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface PlatformSiteConfig {
   id: string;
   name: string;
@@ -91,6 +117,7 @@ export interface PlatformPlanConfig {
   siteId: string;
   profileId: string;
   mailConfigId: string;
+  browserEnvironmentConfigId: string;
   runMode: RunMode;
   continueAfterProtectedChallenge: boolean;
   createdAt: string;
@@ -134,11 +161,36 @@ export interface PlatformSystemConfig {
   updatedAt: string;
 }
 
+export interface PlatformBrowserEnvironmentConfig {
+  id: string;
+  name: string;
+  description: string;
+  sourceType: string;
+  sourceLabel: string;
+  approvalStatus: string;
+  approvedBy: string;
+  approvedAt: string;
+  browserName: string;
+  browserVersion: string;
+  platform: string;
+  userAgent: string;
+  userAgentMetadata: Record<string, unknown>;
+  locale: string;
+  languages: string[];
+  timezone: string;
+  viewport: Record<string, unknown>;
+  screen: Record<string, unknown>;
+  geolocation: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ActivePlatformContext {
   site: PlatformSiteConfig;
   plan: PlatformPlanConfig;
   profile: PlatformProfileConfig;
   mailConfig: PlatformMailConfig | null;
+  browserEnvironmentConfig: PlatformBrowserEnvironmentConfig;
   system: PlatformSystemConfig;
 }
 
@@ -242,6 +294,9 @@ function mapPlanRow(row: PlanRow): PlatformPlanConfig {
     siteId: String(row.site_id ?? ""),
     profileId: String(row.profile_id ?? ""),
     mailConfigId: row.mail_config_id ? String(row.mail_config_id) : "",
+    browserEnvironmentConfigId: row.browser_environment_config_id
+      ? String(row.browser_environment_config_id)
+      : "",
     runMode: normalizeRunMode(row.run_mode),
     continueAfterProtectedChallenge: normalizeBoolean(
       row.continue_after_protected_challenge,
@@ -308,6 +363,43 @@ function mapSystemRow(row: SystemRow | undefined): PlatformSystemConfig {
   };
 }
 
+function mapBrowserEnvironmentConfigRow(
+  row: BrowserEnvironmentConfigRow
+): PlatformBrowserEnvironmentConfig {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    description: String(row.description ?? ""),
+    sourceType: String(row.source_type ?? "manual"),
+    sourceLabel: String(row.source_label ?? ""),
+    approvalStatus: String(row.approval_status ?? "pending"),
+    approvedBy: String(row.approved_by ?? ""),
+    approvedAt: String(row.approved_at ?? ""),
+    browserName: String(row.browser_name ?? ""),
+    browserVersion: String(row.browser_version ?? ""),
+    platform: String(row.platform ?? ""),
+    userAgent: String(row.user_agent ?? ""),
+    userAgentMetadata: parseJson<Record<string, unknown>>(
+      row.user_agent_metadata_json,
+      {}
+    ),
+    locale: String(row.locale ?? "en-US"),
+    languages: normalizeStringArray(parseJson<unknown[]>(row.languages_json, [])),
+    timezone: String(row.timezone ?? "UTC"),
+    viewport: normalizeObject<Record<string, unknown>>(
+      parseJson<Record<string, unknown>>(row.viewport_json, {}),
+      {}
+    ),
+    screen: normalizeObject<Record<string, unknown>>(
+      parseJson<Record<string, unknown>>(row.screen_json, {}),
+      {}
+    ),
+    geolocation: parseJson<Record<string, unknown> | null>(row.geolocation_json, null),
+    createdAt: String(row.created_at ?? nowIso()),
+    updatedAt: String(row.updated_at ?? nowIso())
+  };
+}
+
 function getSelectedPlanRow(database: DatabaseSync, selection: SelectionRow | undefined): PlanRow | null {
   if (selection?.selected_plan_id) {
     const selectedRow = database
@@ -356,6 +448,13 @@ export function readActivePlatformContext(): ActivePlatformContext {
           .prepare("SELECT * FROM mail_configs WHERE id = ?")
           .get(String(planRow.mail_config_id)) as MailConfigRow | undefined)
       : undefined;
+    const browserEnvironmentConfigRow = planRow.browser_environment_config_id
+      ? (database
+          .prepare("SELECT * FROM browser_environment_configs WHERE id = ?")
+          .get(String(planRow.browser_environment_config_id)) as
+            | BrowserEnvironmentConfigRow
+            | undefined)
+      : undefined;
     const systemRow = database
       .prepare("SELECT * FROM system_settings WHERE singleton = 1")
       .get() as SystemRow | undefined;
@@ -368,11 +467,18 @@ export function readActivePlatformContext(): ActivePlatformContext {
       throw new Error(`当前活动方案关联的画像不存在：${String(planRow.profile_id ?? "")}`);
     }
 
+    if (!browserEnvironmentConfigRow) {
+      throw new Error(
+        `当前活动方案关联的浏览器环境配置不存在：${String(planRow.browser_environment_config_id ?? "")}`
+      );
+    }
+
     return {
       site: mapSiteRow(siteRow),
       plan: mapPlanRow(planRow),
       profile: mapProfileRow(profileRow),
       mailConfig: mailConfigRow ? mapMailConfigRow(mailConfigRow) : null,
+      browserEnvironmentConfig: mapBrowserEnvironmentConfigRow(browserEnvironmentConfigRow),
       system: mapSystemRow(systemRow)
     };
   } finally {

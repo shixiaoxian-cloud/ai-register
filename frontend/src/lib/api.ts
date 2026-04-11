@@ -1,5 +1,6 @@
 import type {
   ArtifactEntry,
+  BrowserEnvironmentConfig,
   CaseRecord,
   MailConfigResource,
   MailTestResult,
@@ -118,6 +119,45 @@ export const api = {
       body: plan
     });
     return payload.plan;
+  },
+
+  async saveBrowserEnvironmentConfig(browserEnvironmentConfig: BrowserEnvironmentConfig) {
+    const method = browserEnvironmentConfig.id ? "PUT" : "POST";
+    const target = browserEnvironmentConfig.id
+      ? `/api/platform/browser-environments/${browserEnvironmentConfig.id}`
+      : "/api/platform/browser-environments";
+    const payload = await requestJson<{
+      ok: true;
+      browserEnvironmentConfig: BrowserEnvironmentConfig;
+    }>(target, {
+      method,
+      body: browserEnvironmentConfig
+    });
+    return payload.browserEnvironmentConfig;
+  },
+
+  async importLegacyBrowserEnvironmentConfig(sourceLabel: string, payload: unknown) {
+    const response = await requestJson<{
+      ok: true;
+      browserEnvironmentConfig: BrowserEnvironmentConfig;
+    }>("/api/platform/browser-environments/import-legacy", {
+      method: "POST",
+      body: {
+        sourceLabel,
+        payload
+      }
+    });
+    return response.browserEnvironmentConfig;
+  },
+
+  async deleteBrowserEnvironmentConfig(browserEnvironmentConfigId: string) {
+    const payload = await requestJson<{
+      ok: true;
+      browserEnvironmentConfig: BrowserEnvironmentConfig;
+    }>(`/api/platform/browser-environments/${browserEnvironmentConfigId}`, {
+      method: "DELETE"
+    });
+    return payload.browserEnvironmentConfig;
   },
 
   async deletePlan(planId: string) {

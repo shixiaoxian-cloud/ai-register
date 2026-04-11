@@ -2,6 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ActionIconButton } from "../components/ActionIconButton";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SectionCard } from "../components/SectionCard";
 import { StatusPill } from "../components/StatusPill";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
@@ -128,6 +129,8 @@ export function TaskCenterPage() {
   const [runCount, setRunCount] = useState("1");
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingDeleteTask, setPendingDeleteTask] = useState<TaskRecord | null>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [taskSearch, setTaskSearch] = useState("");
   const [logSearch, setLogSearch] = useState("");
   const [taskNameDraft, setTaskNameDraft] = useState("");
@@ -249,6 +252,8 @@ export function TaskCenterPage() {
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
   const selectedCase = cases.find((caseRecord) => caseRecord.id === selectedCaseId) || null;
   const activeRun = runs.find((run) => run.status === "running" || run.status === "stopping") || null;
+  const selectedPlan =
+    platformState?.plans.find((plan) => plan.id === selectedPlanId) || null;
 
   function findLatestRunForTask(taskId: string) {
     return runs.find((run) => run.taskId === taskId) || null;
@@ -324,27 +329,34 @@ export function TaskCenterPage() {
     }
   }
 
-  async function handleDeleteTask(task: TaskRecord) {
+  function handleDeleteTask(task: TaskRecord) {
     const latestRun = findLatestRunForTask(task.id);
     const rowCanDelete = normalizeTaskStatus(latestRun?.status || task.status) !== "running";
     if (!rowCanDelete) {
       return;
     }
 
-    const shouldDelete = window.confirm(`确认删除任务“${task.name}”吗？`);
-    if (!shouldDelete) {
+    setPendingDeleteTask(task);
+  }
+
+  async function handleConfirmDeleteTask() {
+    if (!pendingDeleteTask) {
       return;
     }
 
     try {
-      await api.deleteTask(task.id);
+      setIsDeletingTask(true);
+      await api.deleteTask(pendingDeleteTask.id);
       const refreshedTasks = await refreshTasks();
       setSelectedTaskId(refreshedTasks[0]?.id || "");
       setDetailMode("view");
       setSuccess("任务已删除。");
       setMessage("");
+      setPendingDeleteTask(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "删除任务失败。");
+    } finally {
+      setIsDeletingTask(false);
     }
   }
 
@@ -441,9 +453,26 @@ export function TaskCenterPage() {
             />
           </label>
         </div>
+        <div className="control-summary-grid">
+          <div>
+            <span>当前执行</span>
+            <strong>{activeRun ? "有进行中任务" : "当前空闲"}</strong>
+            <p>{activeRun ? `${activeRun.planName} · ${activeRun.siteName}` : "可以从这里快速发起新的批量执行。"}</p>
+          </div>
+          <div>
+            <span>已选方案</span>
+            <strong>{selectedPlan?.name || "未选择方案"}</strong>
+            <p>{selectedPlan?.description || "选择方案后会沿用其默认运行参数。"}</p>
+          </div>
+          <div>
+            <span>本次批次</span>
+            <strong>{`${runCount} 次`}</strong>
+            <p>{mode === "headed" ? "有头模式，适合人工接续观察。" : "无头模式，适合快速回归验证。"}</p>
+          </div>
+        </div>
       </SectionCard>
 
-      <div className="detail-layout">
+      <div className="detail-layout detail-layout--wide">
         <SectionCard title="任务台账" subtitle="按任务聚合查看状态、进度和操作入口。">
           <div className="table-wrap">
             <table className="data-table">
@@ -719,6 +748,20 @@ export function TaskCenterPage() {
           )}
         </SectionCard>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteTask)}
+        title={`确认删除任务“${pendingDeleteTask?.name || ""}”吗？`}
+        description="删除后，当前任务在控制台中的聚合记录将被移除。请先确认该任务当前不在运行中。"
+        confirmLabel="确认删除"
+        confirming={isDeletingTask}
+        onConfirm={handleConfirmDeleteTask}
+        onCancel={() => {
+          if (!isDeletingTask) {
+            setPendingDeleteTask(null);
+          }
+        }}
+      />
     </div>
   );
 }

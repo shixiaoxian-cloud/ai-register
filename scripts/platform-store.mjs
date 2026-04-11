@@ -16,6 +16,71 @@ const SAFE_BYPASS_PATTERNS = [
   /\bbypass\b/i
 ];
 
+const BROWSER_ENVIRONMENT_SOURCE_TYPES = new Set([
+  "manual",
+  "local-export",
+  "approved-template",
+  "legacy-import"
+]);
+
+const BROWSER_ENVIRONMENT_APPROVAL_STATUSES = new Set([
+  "approved",
+  "pending",
+  "rejected"
+]);
+
+const BROWSER_ENVIRONMENT_BANNED_KEYS = new Set([
+  "stealthmode",
+  "telemetrymode",
+  "canvas",
+  "webgl",
+  "audio",
+  "plugins",
+  "plugin",
+  "connection",
+  "battery",
+  "navigatoroverrides",
+  "navigatoroverride",
+  "rotation",
+  "rotations",
+  "detectionsite",
+  "sourceurl"
+]);
+
+const BROWSER_ENVIRONMENT_UA_DATA_KEYS = new Set([
+  "brands",
+  "mobile",
+  "platform",
+  "architecture",
+  "bitness",
+  "model",
+  "platformVersion",
+  "fullVersionList"
+]);
+
+const BROWSER_ENVIRONMENT_VIEWPORT_KEYS = new Set([
+  "width",
+  "height",
+  "deviceScaleFactor",
+  "isMobile",
+  "hasTouch"
+]);
+
+const BROWSER_ENVIRONMENT_SCREEN_KEYS = new Set([
+  "width",
+  "height",
+  "availWidth",
+  "availHeight",
+  "colorDepth",
+  "pixelDepth"
+]);
+
+const BROWSER_ENVIRONMENT_GEOLOCATION_KEYS = new Set([
+  "latitude",
+  "longitude",
+  "accuracy"
+]);
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -191,6 +256,441 @@ function normalizeStringArray(values) {
   return values
     .map((value) => String(value || "").trim())
     .filter(Boolean);
+}
+
+function normalizeNonEmptyString(value, fallback = "") {
+  return String(value || "").trim() || fallback;
+}
+
+function normalizeBrowserEnvironmentSourceType(value) {
+  const normalized = String(value || "").trim();
+  if (normalized === "browser-export") {
+    return "local-export";
+  }
+
+  if (normalized === "preset") {
+    return "approved-template";
+  }
+
+  if (normalized === "detection-site") {
+    throw new Error("检测站导入不能作为浏览器环境配置的正式来源。");
+  }
+
+  return BROWSER_ENVIRONMENT_SOURCE_TYPES.has(normalized) ? normalized : "manual";
+}
+
+function normalizeBrowserEnvironmentApprovalStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return BROWSER_ENVIRONMENT_APPROVAL_STATUSES.has(normalized)
+    ? normalized
+    : "pending";
+}
+
+function assertAllowedObjectKeys(value, allowedKeys, trail) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return;
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${trail} 包含未允许的字段：${key}`);
+    }
+  }
+}
+
+function assertNoBrowserEnvironmentBannedFields(value, trail = "browserEnvironment") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      assertNoBrowserEnvironmentBannedFields(item, `${trail}[${index}]`)
+    );
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const normalizedKey = String(key || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (
+      BROWSER_ENVIRONMENT_BANNED_KEYS.has(normalizedKey) ||
+      normalizedKey.includes("noise") ||
+      normalizedKey.includes("spoof") ||
+      normalizedKey.includes("fingerprint")
+    ) {
+      throw new Error(`${trail} 命中了禁止字段：${key}`);
+    }
+
+    if (
+      typeof nestedValue === "string" &&
+      /(stealth|noise|spoof|bot\.sannysoft|pixelscan|antoinevastel)/i.test(
+        nestedValue
+      )
+    ) {
+      throw new Error(`${trail}.${key} 包含不允许的来源或规避语义。`);
+    }
+
+    assertNoBrowserEnvironmentBannedFields(nestedValue, `${trail}.${key}`);
+  }
+}
+
+function normalizeClientHintBrandEntries(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((entry) => ({
+      brand: normalizeNonEmptyString(entry?.brand),
+      version: normalizeNonEmptyString(entry?.version)
+    }))
+    .filter((entry) => entry.brand && entry.version);
+}
+
+function normalizeBrowserEnvironmentUserAgentMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      brands: [],
+      mobile: false,
+      platform: "",
+      architecture: "",
+      bitness: "",
+      model: "",
+      platformVersion: "",
+      fullVersionList: []
+    };
+  }
+
+  assertAllowedObjectKeys(
+    value,
+    BROWSER_ENVIRONMENT_UA_DATA_KEYS,
+    "浏览器环境配置.uaData"
+  );
+
+  return {
+    brands: normalizeClientHintBrandEntries(value.brands),
+    mobile: parseBoolean(value.mobile, false),
+    platform: normalizeNonEmptyString(value.platform),
+    architecture: normalizeNonEmptyString(value.architecture),
+    bitness: normalizeNonEmptyString(value.bitness),
+    model: normalizeNonEmptyString(value.model),
+    platformVersion: normalizeNonEmptyString(value.platformVersion),
+    fullVersionList: normalizeClientHintBrandEntries(value.fullVersionList)
+  };
+}
+
+function normalizeBrowserEnvironmentViewport(value) {
+  const fallback = {
+    width: 1440,
+    height: 900,
+    deviceScaleFactor: 1,
+    isMobile: false,
+    hasTouch: false
+  };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+
+  assertAllowedObjectKeys(value, BROWSER_ENVIRONMENT_VIEWPORT_KEYS, "浏览器环境配置.viewport");
+
+  return {
+    width: parseNumber(value.width, fallback.width),
+    height: parseNumber(value.height, fallback.height),
+    deviceScaleFactor: parseNumber(
+      value.deviceScaleFactor,
+      fallback.deviceScaleFactor
+    ),
+    isMobile: parseBoolean(value.isMobile, fallback.isMobile),
+    hasTouch: parseBoolean(value.hasTouch, fallback.hasTouch)
+  };
+}
+
+function normalizeBrowserEnvironmentScreen(value, viewport) {
+  const fallback = {
+    width: viewport.width,
+    height: viewport.height,
+    availWidth: viewport.width,
+    availHeight: viewport.height,
+    colorDepth: 24,
+    pixelDepth: 24
+  };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+
+  assertAllowedObjectKeys(value, BROWSER_ENVIRONMENT_SCREEN_KEYS, "浏览器环境配置.screen");
+
+  return {
+    width: parseNumber(value.width, fallback.width),
+    height: parseNumber(value.height, fallback.height),
+    availWidth: parseNumber(value.availWidth, fallback.availWidth),
+    availHeight: parseNumber(value.availHeight, fallback.availHeight),
+    colorDepth: parseNumber(value.colorDepth, fallback.colorDepth),
+    pixelDepth: parseNumber(value.pixelDepth, fallback.pixelDepth)
+  };
+}
+
+function normalizeBrowserEnvironmentGeolocation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  assertAllowedObjectKeys(
+    value,
+    BROWSER_ENVIRONMENT_GEOLOCATION_KEYS,
+    "浏览器环境配置.geolocation"
+  );
+
+  return {
+    latitude: parseNumber(value.latitude, 0),
+    longitude: parseNumber(value.longitude, 0),
+    accuracy: parseNumber(value.accuracy, 100)
+  };
+}
+
+function normalizeBrowserEnvironmentLanguages(value, locale) {
+  const languages = normalizeStringArray(value);
+  return languages.length ? languages : [locale];
+}
+
+function createDefaultBrowserEnvironmentConfig(currentTime = nowIso()) {
+  const viewport = normalizeBrowserEnvironmentViewport({
+    width: 1440,
+    height: 900
+  });
+
+  return {
+    id: createId("browser-env"),
+    name: "默认浏览器环境",
+    description: "已从现有 Playwright 默认浏览器配置自动引导生成。",
+    sourceType: "approved-template",
+    sourceLabel: "playwright-defaults",
+    approvalStatus: "approved",
+    approvedBy: "system-bootstrap",
+    approvedAt: currentTime,
+    browserName: "Chromium",
+    browserVersion: "131.0.0.0",
+    platform: "Windows",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    userAgentMetadata: {
+      brands: [
+        { brand: "Chromium", version: "131" },
+        { brand: "Not_A Brand", version: "24" },
+        { brand: "Google Chrome", version: "131" }
+      ],
+      mobile: false,
+      platform: "Windows",
+      architecture: "x86",
+      bitness: "64",
+      model: "",
+      platformVersion: "15.0.0",
+      fullVersionList: [
+        { brand: "Chromium", version: "131.0.0.0" },
+        { brand: "Not_A Brand", version: "24.0.0.0" },
+        { brand: "Google Chrome", version: "131.0.0.0" }
+      ]
+    },
+    locale: "en-US",
+    languages: ["en-US", "en"],
+    timezone: "America/Los_Angeles",
+    viewport,
+    screen: normalizeBrowserEnvironmentScreen(
+      {
+        width: 1440,
+        height: 900,
+        availWidth: 1440,
+        availHeight: 900,
+        colorDepth: 24,
+        pixelDepth: 24
+      },
+      viewport
+    ),
+    geolocation: {
+      latitude: 34.0522,
+      longitude: -118.2437,
+      accuracy: 100
+    },
+    createdAt: currentTime,
+    updatedAt: currentTime
+  };
+}
+
+function normalizeBrowserEnvironmentConfig(record) {
+  assertNoBrowserEnvironmentBannedFields(record, "browserEnvironment");
+  const sourceType = normalizeBrowserEnvironmentSourceType(record.sourceType || record.source);
+  const approvalStatus = normalizeBrowserEnvironmentApprovalStatus(record.approvalStatus);
+  const locale = normalizeNonEmptyString(record.locale || record.language, "en-US");
+  const viewport = normalizeBrowserEnvironmentViewport(record.viewport);
+  const browserName = normalizeNonEmptyString(record.browserName || record.name, "Chromium");
+  const browserVersion = normalizeNonEmptyString(
+    record.browserVersion || record.version,
+    ""
+  );
+  const userAgent = normalizeNonEmptyString(record.userAgent, "");
+  const timezone = normalizeNonEmptyString(record.timezone, "UTC");
+
+  if (!browserVersion) {
+    throw new Error("浏览器环境配置必须提供浏览器版本。");
+  }
+
+  if (!userAgent) {
+    throw new Error("浏览器环境配置必须提供 userAgent。");
+  }
+
+  return {
+    id: String(record.id || createId("browser-env")),
+    name: normalizeNonEmptyString(record.name, "未命名浏览器环境"),
+    description: normalizeNonEmptyString(record.description),
+    sourceType,
+    sourceLabel: normalizeNonEmptyString(
+      record.sourceLabel || record.sourceUrl || record.sourcePath
+    ),
+    approvalStatus,
+    approvedBy: normalizeNonEmptyString(record.approvedBy),
+    approvedAt:
+      approvalStatus === "approved"
+        ? normalizeNonEmptyString(record.approvedAt, nowIso())
+        : normalizeNonEmptyString(record.approvedAt),
+    browserName,
+    browserVersion,
+    platform: normalizeNonEmptyString(record.platform, "Windows"),
+    userAgent,
+    userAgentMetadata: normalizeBrowserEnvironmentUserAgentMetadata(
+      record.userAgentMetadata || record.uaData
+    ),
+    locale,
+    languages: normalizeBrowserEnvironmentLanguages(record.languages, locale),
+    timezone,
+    viewport,
+    screen: normalizeBrowserEnvironmentScreen(record.screen, viewport),
+    geolocation: normalizeBrowserEnvironmentGeolocation(record.geolocation),
+    createdAt: record.createdAt || nowIso(),
+    updatedAt: nowIso()
+  };
+}
+
+function normalizeLegacyFingerprintAsset(payload, sourceLabel = "legacy-import") {
+  const rawPayload = clone(payload || {});
+  assertNoBrowserEnvironmentBannedFields(rawPayload, "legacyFingerprint");
+
+  if (rawPayload.source === "detection-site" || rawPayload.sourceUrl) {
+    throw new Error("检测站来源的历史资产不能迁移为正式浏览器环境配置。");
+  }
+
+  return normalizeBrowserEnvironmentConfig({
+    id: rawPayload.id,
+    name: rawPayload.name || "历史浏览器环境导入",
+    description: rawPayload.description || "从历史 fingerprint 资产迁移而来。",
+    sourceType: "legacy-import",
+    sourceLabel,
+    approvalStatus: rawPayload.approvalStatus || "pending",
+    approvedBy: rawPayload.approvedBy,
+    approvedAt: rawPayload.approvedAt,
+    browserName: rawPayload.browserName || rawPayload.name || "Chromium",
+    browserVersion: rawPayload.browserVersion || rawPayload.version,
+    platform: rawPayload.platform,
+    userAgent: rawPayload.userAgent,
+    userAgentMetadata: rawPayload.userAgentMetadata || rawPayload.uaData,
+    locale: rawPayload.locale || rawPayload.language,
+    languages: rawPayload.languages,
+    timezone: rawPayload.timezone,
+    viewport: rawPayload.viewport || rawPayload.screen,
+    screen: rawPayload.screen,
+    geolocation: rawPayload.geolocation,
+    createdAt: rawPayload.createdAt,
+    updatedAt: rawPayload.updatedAt
+  });
+}
+
+function validateBrowserEnvironmentForExecution(config) {
+  if (!config) {
+    throw new Error("测试方案尚未绑定浏览器环境配置。");
+  }
+
+  if (config.approvalStatus !== "approved") {
+    throw new Error("浏览器环境配置未通过审批，不能执行测试。");
+  }
+
+  if (!config.userAgent || !config.browserVersion || !config.locale || !config.timezone) {
+    throw new Error("浏览器环境配置缺少执行所需的关键字段。");
+  }
+
+  if (!config.viewport?.width || !config.viewport?.height) {
+    throw new Error("浏览器环境配置缺少有效的 viewport。");
+  }
+
+  if (
+    config.geolocation &&
+    (!Number.isFinite(config.geolocation.latitude) ||
+      !Number.isFinite(config.geolocation.longitude))
+  ) {
+    throw new Error("浏览器环境配置中的地理位置字段无效。");
+  }
+}
+
+function buildBrowserEnvironmentLaunchSettings(config) {
+  validateBrowserEnvironmentForExecution(config);
+  const uaData = config.userAgentMetadata || {};
+  const secChUa = (uaData.brands || [])
+    .map((item) => `"${item.brand}";v="${item.version}"`)
+    .join(", ");
+  const fullVersionList = (uaData.fullVersionList || [])
+    .map((item) => `"${item.brand}";v="${item.version}"`)
+    .join(", ");
+
+  return {
+    env: {
+      BROWSER_USER_AGENT: config.userAgent,
+      BROWSER_LOCALE: config.locale,
+      BROWSER_TIMEZONE: config.timezone,
+      BROWSER_VIEWPORT_WIDTH: String(config.viewport.width),
+      BROWSER_VIEWPORT_HEIGHT: String(config.viewport.height),
+      BROWSER_SCREEN_WIDTH: String(config.screen.width),
+      BROWSER_SCREEN_HEIGHT: String(config.screen.height),
+      BROWSER_SCREEN_AVAIL_WIDTH: String(config.screen.availWidth),
+      BROWSER_SCREEN_AVAIL_HEIGHT: String(config.screen.availHeight),
+      BROWSER_COLOR_DEPTH: String(config.screen.colorDepth),
+      BROWSER_PIXEL_DEPTH: String(config.screen.pixelDepth),
+      BROWSER_HAS_TOUCH: config.viewport.hasTouch ? "1" : "0",
+      BROWSER_IS_MOBILE: config.viewport.isMobile ? "1" : "0",
+      BROWSER_DEVICE_SCALE_FACTOR: String(config.viewport.deviceScaleFactor || 1),
+      BROWSER_GEO_LATITUDE: String(config.geolocation?.latitude ?? ""),
+      BROWSER_GEO_LONGITUDE: String(config.geolocation?.longitude ?? ""),
+      BROWSER_GEO_ACCURACY: String(config.geolocation?.accuracy ?? ""),
+      BROWSER_UA_DATA_JSON: JSON.stringify(uaData),
+      BROWSER_LANGUAGES_JSON: JSON.stringify(config.languages || []),
+      BROWSER_BROWSER_NAME: config.browserName,
+      BROWSER_BROWSER_VERSION: config.browserVersion,
+      BROWSER_ENVIRONMENT_CONFIG_ID: config.id,
+      BROWSER_ENVIRONMENT_NAME: config.name,
+      BROWSER_ENVIRONMENT_SOURCE_TYPE: config.sourceType,
+      BROWSER_ENVIRONMENT_APPROVAL_STATUS: config.approvalStatus,
+      BROWSER_SEC_CH_UA: secChUa,
+      BROWSER_SEC_CH_UA_FULL_VERSION_LIST: fullVersionList,
+      BROWSER_SEC_CH_UA_MOBILE: uaData.mobile ? "?1" : "?0",
+      BROWSER_SEC_CH_UA_PLATFORM: uaData.platform ? `"${uaData.platform}"` : ""
+    },
+    summary: {
+      configId: config.id,
+      name: config.name,
+      browserName: config.browserName,
+      browserVersion: config.browserVersion,
+      sourceType: config.sourceType,
+      sourceLabel: config.sourceLabel,
+      approvalStatus: config.approvalStatus,
+      approvedBy: config.approvedBy,
+      approvedAt: config.approvedAt,
+      locale: config.locale,
+      timezone: config.timezone,
+      userAgent: config.userAgent,
+      viewport: clone(config.viewport),
+      screen: clone(config.screen),
+      geolocation: config.geolocation ? clone(config.geolocation) : null
+    }
+  };
 }
 
 function normalizeObject(value, fallback = {}) {
@@ -374,6 +874,12 @@ function normalizePlanRecord(record, state) {
     String(record.profileId || state.selectedProfileId || state.profiles[0]?.id || "").trim();
   const mailConfigId =
     String(record.mailConfigId || state.selectedMailConfigId || state.mailConfigs[0]?.id || "").trim();
+  const browserEnvironmentConfigId = String(
+    record.browserEnvironmentConfigId ||
+      state.selectedBrowserEnvironmentConfigId ||
+      state.browserEnvironmentConfigs?.[0]?.id ||
+      ""
+  ).trim();
 
   if (!siteId) {
     throw new Error("测试方案必须关联一个站点。");
@@ -383,6 +889,10 @@ function normalizePlanRecord(record, state) {
     throw new Error("测试方案必须关联一个画像配置。");
   }
 
+  if (!browserEnvironmentConfigId) {
+    throw new Error("测试方案必须关联一个浏览器环境配置。");
+  }
+
   return {
     id: String(record.id || createId("plan")),
     name: String(record.name || "未命名方案").trim(),
@@ -390,6 +900,7 @@ function normalizePlanRecord(record, state) {
     siteId,
     profileId,
     mailConfigId,
+    browserEnvironmentConfigId,
     runMode: record.runMode === "headed" ? "headed" : "headless",
     continueAfterProtectedChallenge: parseBoolean(
       record.continueAfterProtectedChallenge,
@@ -434,6 +945,9 @@ function normalizeRunRecord(record) {
     siteName: String(record.siteName || "").trim(),
     profileId: String(record.profileId || "").trim(),
     mailConfigId: record.mailConfigId ? String(record.mailConfigId).trim() : null,
+    browserEnvironmentConfigId: record.browserEnvironmentConfigId
+      ? String(record.browserEnvironmentConfigId).trim()
+      : null,
     status: String(record.status || "idle").trim() || "idle",
     mode: record.mode === "headed" ? "headed" : "headless",
     summary: String(record.summary || "").trim(),
@@ -445,6 +959,9 @@ function normalizeRunRecord(record) {
     latestStage: normalizeStructuredRecord(record.latestStage),
     insight: normalizeStructuredRecord(record.insight),
     conclusion: normalizeStructuredRecord(record.conclusion),
+    browserEnvironmentSummary: normalizeStructuredRecord(
+      record.browserEnvironmentSummary
+    ),
     artifactKeys: normalizeStringArray(record.artifactKeys),
     reportAvailable: parseBoolean(record.reportAvailable, false),
     pid: parseNumber(record.pid, null),
@@ -999,6 +1516,9 @@ function normalizeState(rawState) {
     selectedPlanId: String(rawState.selectedPlanId || "").trim(),
     selectedProfileId: String(rawState.selectedProfileId || "").trim(),
     selectedMailConfigId: String(rawState.selectedMailConfigId || "").trim(),
+    selectedBrowserEnvironmentConfigId: String(
+      rawState.selectedBrowserEnvironmentConfigId || ""
+    ).trim(),
     sites: Array.isArray(rawState.sites)
       ? rawState.sites.map((record) => normalizeSiteRecord(record))
       : [],
@@ -1007,6 +1527,11 @@ function normalizeState(rawState) {
       : [],
     mailConfigs: Array.isArray(rawState.mailConfigs)
       ? rawState.mailConfigs.map((record) => normalizeMailConfig(record))
+      : [],
+    browserEnvironmentConfigs: Array.isArray(rawState.browserEnvironmentConfigs)
+      ? rawState.browserEnvironmentConfigs.map((record) =>
+          normalizeBrowserEnvironmentConfig(record)
+        )
       : [],
     plans: [],
     system: {
@@ -1033,6 +1558,10 @@ function normalizeState(rawState) {
   state.selectedSiteId = state.selectedSiteId || state.sites[0].id;
   state.selectedProfileId = state.selectedProfileId || state.profiles[0].id;
   state.selectedMailConfigId = state.selectedMailConfigId || state.mailConfigs[0].id;
+  state.selectedBrowserEnvironmentConfigId =
+    state.selectedBrowserEnvironmentConfigId ||
+    state.browserEnvironmentConfigs[0]?.id ||
+    "";
   state.selectedPlanId = state.selectedPlanId || state.plans[0].id;
   return state;
 }
@@ -1082,6 +1611,32 @@ function mapMailConfigRow(row) {
   };
 }
 
+function mapBrowserEnvironmentConfigRow(row) {
+  return {
+    id: String(row.id),
+    name: String(row.name || ""),
+    description: String(row.description || ""),
+    sourceType: String(row.source_type || "manual"),
+    sourceLabel: String(row.source_label || ""),
+    approvalStatus: String(row.approval_status || "pending"),
+    approvedBy: String(row.approved_by || ""),
+    approvedAt: String(row.approved_at || ""),
+    browserName: String(row.browser_name || ""),
+    browserVersion: String(row.browser_version || ""),
+    platform: String(row.platform || ""),
+    userAgent: String(row.user_agent || ""),
+    userAgentMetadata: parseStoredJson(row.user_agent_metadata_json, {}),
+    locale: String(row.locale || "en-US"),
+    languages: parseStoredJson(row.languages_json, ["en-US"]),
+    timezone: String(row.timezone || "UTC"),
+    viewport: parseStoredJson(row.viewport_json, {}),
+    screen: parseStoredJson(row.screen_json, {}),
+    geolocation: parseStoredJson(row.geolocation_json, null),
+    createdAt: String(row.created_at || nowIso()),
+    updatedAt: String(row.updated_at || nowIso())
+  };
+}
+
 function mapPlanRow(row) {
   return {
     id: String(row.id),
@@ -1090,6 +1645,9 @@ function mapPlanRow(row) {
     siteId: String(row.site_id || ""),
     profileId: String(row.profile_id || ""),
     mailConfigId: row.mail_config_id ? String(row.mail_config_id) : "",
+    browserEnvironmentConfigId: row.browser_environment_config_id
+      ? String(row.browser_environment_config_id)
+      : "",
     runMode: row.run_mode === "headed" ? "headed" : "headless",
     continueAfterProtectedChallenge: normalizeSqliteBoolean(
       row.continue_after_protected_challenge,
@@ -1111,6 +1669,7 @@ function mapRunRow(row) {
     siteName: row.site_name,
     profileId: row.profile_id,
     mailConfigId: row.mail_config_id,
+    browserEnvironmentConfigId: row.browser_environment_config_id,
     status: row.status,
     mode: row.mode,
     summary: row.summary,
@@ -1122,6 +1681,10 @@ function mapRunRow(row) {
     latestStage: parseStoredJson(row.latest_stage_json, null),
     insight: parseStoredJson(row.insight_json, null),
     conclusion: parseStoredJson(row.conclusion_json, null),
+    browserEnvironmentSummary: parseStoredJson(
+      row.browser_environment_summary_json,
+      null
+    ),
     artifactKeys: parseStoredJson(row.artifact_keys_json, []),
     reportAvailable: normalizeSqliteBoolean(row.report_available, false),
     pid: row.pid,
@@ -1309,6 +1872,31 @@ function createSchemaSql() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS browser_environment_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'manual',
+      source_label TEXT NOT NULL DEFAULT '',
+      approval_status TEXT NOT NULL DEFAULT 'pending',
+      approved_by TEXT NOT NULL DEFAULT '',
+      approved_at TEXT NOT NULL DEFAULT '',
+      approval_note TEXT NOT NULL DEFAULT '',
+      browser_name TEXT NOT NULL DEFAULT '',
+      browser_version TEXT NOT NULL DEFAULT '',
+      platform TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      user_agent_metadata_json TEXT NOT NULL DEFAULT '{}',
+      locale TEXT NOT NULL DEFAULT 'en-US',
+      languages_json TEXT NOT NULL DEFAULT '[]',
+      timezone TEXT NOT NULL DEFAULT 'UTC',
+      viewport_json TEXT NOT NULL DEFAULT '{}',
+      screen_json TEXT NOT NULL DEFAULT '{}',
+      geolocation_json TEXT NOT NULL DEFAULT 'null',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS plans (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1316,6 +1904,7 @@ function createSchemaSql() {
       site_id TEXT NOT NULL REFERENCES sites(id),
       profile_id TEXT NOT NULL REFERENCES profiles(id),
       mail_config_id TEXT REFERENCES mail_configs(id),
+      browser_environment_config_id TEXT REFERENCES browser_environment_configs(id),
       run_mode TEXT NOT NULL CHECK (run_mode IN ('headless', 'headed')),
       continue_after_protected_challenge INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -1328,6 +1917,7 @@ function createSchemaSql() {
       selected_plan_id TEXT NOT NULL DEFAULT '',
       selected_profile_id TEXT NOT NULL DEFAULT '',
       selected_mail_config_id TEXT NOT NULL DEFAULT '',
+      selected_browser_environment_config_id TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
 
@@ -1371,6 +1961,7 @@ function createSchemaSql() {
       site_name TEXT NOT NULL DEFAULT '',
       profile_id TEXT NOT NULL DEFAULT '',
       mail_config_id TEXT,
+      browser_environment_config_id TEXT,
       status TEXT NOT NULL DEFAULT 'idle',
       mode TEXT NOT NULL CHECK (mode IN ('headless', 'headed')),
       summary TEXT NOT NULL DEFAULT '',
@@ -1382,6 +1973,7 @@ function createSchemaSql() {
       latest_stage_json TEXT,
       insight_json TEXT,
       conclusion_json TEXT,
+      browser_environment_summary_json TEXT,
       artifact_keys_json TEXT NOT NULL DEFAULT '[]',
       report_available INTEGER NOT NULL DEFAULT 0,
       pid INTEGER,
@@ -1421,6 +2013,7 @@ function createSchemaSql() {
     CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts (task_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_case_id ON artifacts (case_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_bucket_rel_path ON artifacts (bucket, rel_path);
+    CREATE INDEX IF NOT EXISTS idx_browser_environment_configs_approval_status ON browser_environment_configs (approval_status);
   `;
 }
 
@@ -1580,8 +2173,9 @@ export function createPlatformStore(projectRoot) {
     const siteId = createId("site");
     const profileId = createId("profile");
     const mailConfigId = createId("mail");
-    const planId = createId("plan");
     const currentTime = nowIso();
+    const browserEnvironmentConfig = createDefaultBrowserEnvironmentConfig(currentTime);
+    const planId = createId("plan");
     const useTempMail = /USE_TEMP_MAIL=(true|1|yes)/i.test(envText);
     const envValues = {
       tempMailBaseUrl: readEnvValue(envText, "TEMP_MAIL_BASE_URL"),
@@ -1604,6 +2198,7 @@ export function createPlatformStore(projectRoot) {
       selectedPlanId: planId,
       selectedProfileId: profileId,
       selectedMailConfigId: mailConfigId,
+      selectedBrowserEnvironmentConfigId: browserEnvironmentConfig.id,
       sites: [
         {
           id: siteId,
@@ -1641,6 +2236,7 @@ export function createPlatformStore(projectRoot) {
           updatedAt: currentTime
         }
       ],
+      browserEnvironmentConfigs: [browserEnvironmentConfig],
       plans: [
         {
           id: planId,
@@ -1649,6 +2245,7 @@ export function createPlatformStore(projectRoot) {
           siteId,
           profileId,
           mailConfigId,
+          browserEnvironmentConfigId: browserEnvironmentConfig.id,
           runMode: parseBoolean(envValues.headed, false) ? "headed" : "headless",
           continueAfterProtectedChallenge: parseBoolean(
             envValues.continueAfterProtectedChallenge,
@@ -1695,13 +2292,15 @@ export function createPlatformStore(projectRoot) {
         selected_plan_id,
         selected_profile_id,
         selected_mail_config_id,
+        selected_browser_environment_config_id,
         updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?)
+      ) VALUES (1, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(singleton) DO UPDATE SET
         selected_site_id = excluded.selected_site_id,
         selected_plan_id = excluded.selected_plan_id,
         selected_profile_id = excluded.selected_profile_id,
         selected_mail_config_id = excluded.selected_mail_config_id,
+        selected_browser_environment_config_id = excluded.selected_browser_environment_config_id,
         updated_at = excluded.updated_at
     `);
     const upsertSystem = connection.prepare(`
@@ -1762,6 +2361,32 @@ export function createPlatformStore(projectRoot) {
         updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const insertBrowserEnvironmentConfig = connection.prepare(`
+      INSERT INTO browser_environment_configs (
+        id,
+        name,
+        description,
+        source_type,
+        source_label,
+        approval_status,
+        approved_by,
+        approved_at,
+        approval_note,
+        browser_name,
+        browser_version,
+        platform,
+        user_agent,
+        user_agent_metadata_json,
+        locale,
+        languages_json,
+        timezone,
+        viewport_json,
+        screen_json,
+        geolocation_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
     const insertPlan = connection.prepare(`
       INSERT INTO plans (
         id,
@@ -1770,11 +2395,12 @@ export function createPlatformStore(projectRoot) {
         site_id,
         profile_id,
         mail_config_id,
+        browser_environment_config_id,
         run_mode,
         continue_after_protected_challenge,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -1784,6 +2410,7 @@ export function createPlatformStore(projectRoot) {
         DELETE FROM sites;
         DELETE FROM profiles;
         DELETE FROM mail_configs;
+        DELETE FROM browser_environment_configs;
       `);
 
       for (const site of normalizedState.sites) {
@@ -1831,6 +2458,33 @@ export function createPlatformStore(projectRoot) {
         );
       }
 
+      for (const browserEnvironmentConfig of normalizedState.browserEnvironmentConfigs) {
+        insertBrowserEnvironmentConfig.run(
+          browserEnvironmentConfig.id,
+          browserEnvironmentConfig.name,
+          browserEnvironmentConfig.description,
+          browserEnvironmentConfig.sourceType,
+          browserEnvironmentConfig.sourceLabel,
+          browserEnvironmentConfig.approvalStatus,
+          browserEnvironmentConfig.approvedBy,
+          browserEnvironmentConfig.approvedAt,
+          "",
+          browserEnvironmentConfig.browserName,
+          browserEnvironmentConfig.browserVersion,
+          browserEnvironmentConfig.platform,
+          browserEnvironmentConfig.userAgent,
+          serializeJson(browserEnvironmentConfig.userAgentMetadata),
+          browserEnvironmentConfig.locale,
+          serializeJson(browserEnvironmentConfig.languages),
+          browserEnvironmentConfig.timezone,
+          serializeJson(browserEnvironmentConfig.viewport),
+          serializeJson(browserEnvironmentConfig.screen),
+          serializeJson(browserEnvironmentConfig.geolocation),
+          browserEnvironmentConfig.createdAt,
+          browserEnvironmentConfig.updatedAt
+        );
+      }
+
       for (const plan of normalizedState.plans) {
         insertPlan.run(
           plan.id,
@@ -1839,6 +2493,7 @@ export function createPlatformStore(projectRoot) {
           plan.siteId,
           plan.profileId,
           plan.mailConfigId || null,
+          plan.browserEnvironmentConfigId || null,
           plan.runMode,
           sqliteBoolean(plan.continueAfterProtectedChallenge),
           plan.createdAt,
@@ -1851,6 +2506,7 @@ export function createPlatformStore(projectRoot) {
         normalizedState.selectedPlanId,
         normalizedState.selectedProfileId,
         normalizedState.selectedMailConfigId,
+        normalizedState.selectedBrowserEnvironmentConfigId,
         normalizedState.updatedAt
       );
       upsertSystem.run(
@@ -1891,10 +2547,149 @@ export function createPlatformStore(projectRoot) {
   }
 
   function ensureSchemaMigrations(connection) {
+    connection.exec(createSchemaSql());
     ensureColumnExists(connection, "runs", "task_id", "task_id TEXT");
     ensureColumnExists(connection, "runs", "case_id", "case_id TEXT");
+    ensureColumnExists(
+      connection,
+      "runs",
+      "browser_environment_config_id",
+      "browser_environment_config_id TEXT"
+    );
+    ensureColumnExists(
+      connection,
+      "runs",
+      "browser_environment_summary_json",
+      "browser_environment_summary_json TEXT"
+    );
+    ensureColumnExists(
+      connection,
+      "plans",
+      "browser_environment_config_id",
+      "browser_environment_config_id TEXT REFERENCES browser_environment_configs(id)"
+    );
+    ensureColumnExists(
+      connection,
+      "selection_state",
+      "selected_browser_environment_config_id",
+      "selected_browser_environment_config_id TEXT NOT NULL DEFAULT ''"
+    );
     connection.exec("CREATE INDEX IF NOT EXISTS idx_runs_task_id ON runs (task_id)");
     connection.exec("CREATE INDEX IF NOT EXISTS idx_runs_case_id ON runs (case_id)");
+    connection.exec(
+      "CREATE INDEX IF NOT EXISTS idx_runs_browser_environment_config_id ON runs (browser_environment_config_id)"
+    );
+    connection.exec(
+      "CREATE INDEX IF NOT EXISTS idx_plans_browser_environment_config_id ON plans (browser_environment_config_id)"
+    );
+    connection.exec(
+      "CREATE INDEX IF NOT EXISTS idx_browser_environment_configs_approval_status ON browser_environment_configs (approval_status)"
+    );
+  }
+
+  function seedBrowserEnvironmentConfigsIfNeeded(connection) {
+    const count = Number(
+      connection
+        .prepare("SELECT COUNT(*) AS count FROM browser_environment_configs")
+        .get().count || 0
+    );
+
+    if (count > 0) {
+      return;
+    }
+
+    const currentTime = nowIso();
+    const defaultConfig = createDefaultBrowserEnvironmentConfig(currentTime);
+    connection.exec("BEGIN IMMEDIATE");
+    try {
+      connection.prepare(`
+        INSERT INTO browser_environment_configs (
+          id,
+          name,
+          description,
+          source_type,
+          source_label,
+          approval_status,
+          approved_by,
+          approved_at,
+          approval_note,
+          browser_name,
+          browser_version,
+          platform,
+          user_agent,
+          user_agent_metadata_json,
+          locale,
+          languages_json,
+          timezone,
+          viewport_json,
+          screen_json,
+          geolocation_json,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        defaultConfig.id,
+        defaultConfig.name,
+        defaultConfig.description,
+        defaultConfig.sourceType,
+        defaultConfig.sourceLabel,
+        defaultConfig.approvalStatus,
+        defaultConfig.approvedBy,
+        defaultConfig.approvedAt,
+        "",
+        defaultConfig.browserName,
+        defaultConfig.browserVersion,
+        defaultConfig.platform,
+        defaultConfig.userAgent,
+        serializeJson(defaultConfig.userAgentMetadata),
+        defaultConfig.locale,
+        serializeJson(defaultConfig.languages),
+        defaultConfig.timezone,
+        serializeJson(defaultConfig.viewport),
+        serializeJson(defaultConfig.screen),
+        serializeJson(defaultConfig.geolocation),
+        defaultConfig.createdAt,
+        defaultConfig.updatedAt
+      );
+
+      connection.prepare(`
+        UPDATE plans
+        SET browser_environment_config_id = ?
+        WHERE browser_environment_config_id IS NULL OR trim(browser_environment_config_id) = ''
+      `).run(defaultConfig.id);
+
+      connection.prepare(`
+        INSERT INTO selection_state (
+          singleton,
+          selected_site_id,
+          selected_plan_id,
+          selected_profile_id,
+          selected_mail_config_id,
+          selected_browser_environment_config_id,
+          updated_at
+        ) VALUES (
+          1,
+          COALESCE((SELECT selected_site_id FROM selection_state WHERE singleton = 1), ''),
+          COALESCE((SELECT selected_plan_id FROM selection_state WHERE singleton = 1), ''),
+          COALESCE((SELECT selected_profile_id FROM selection_state WHERE singleton = 1), ''),
+          COALESCE((SELECT selected_mail_config_id FROM selection_state WHERE singleton = 1), ''),
+          ?,
+          ?
+        )
+        ON CONFLICT(singleton) DO UPDATE SET
+          selected_browser_environment_config_id = excluded.selected_browser_environment_config_id,
+          updated_at = excluded.updated_at
+      `).run(defaultConfig.id, currentTime);
+
+      connection.exec("COMMIT");
+    } catch (error) {
+      try {
+        connection.exec("ROLLBACK");
+      } catch {
+        // Ignore rollback failure after the original error.
+      }
+      throw error;
+    }
   }
 
   function countRunRecords(connection) {
@@ -2021,6 +2816,7 @@ export function createPlatformStore(projectRoot) {
         site_name,
         profile_id,
         mail_config_id,
+        browser_environment_config_id,
         status,
         mode,
         summary,
@@ -2032,12 +2828,13 @@ export function createPlatformStore(projectRoot) {
         latest_stage_json,
         insight_json,
         conclusion_json,
+        browser_environment_summary_json,
         artifact_keys_json,
         report_available,
         pid,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_id = excluded.task_id,
         case_id = excluded.case_id,
@@ -2047,6 +2844,7 @@ export function createPlatformStore(projectRoot) {
         site_name = excluded.site_name,
         profile_id = excluded.profile_id,
         mail_config_id = excluded.mail_config_id,
+        browser_environment_config_id = excluded.browser_environment_config_id,
         status = excluded.status,
         mode = excluded.mode,
         summary = excluded.summary,
@@ -2058,6 +2856,7 @@ export function createPlatformStore(projectRoot) {
         latest_stage_json = excluded.latest_stage_json,
         insight_json = excluded.insight_json,
         conclusion_json = excluded.conclusion_json,
+        browser_environment_summary_json = excluded.browser_environment_summary_json,
         artifact_keys_json = excluded.artifact_keys_json,
         report_available = excluded.report_available,
         pid = excluded.pid,
@@ -2072,6 +2871,7 @@ export function createPlatformStore(projectRoot) {
       normalizedRun.siteName,
       normalizedRun.profileId,
       normalizedRun.mailConfigId,
+      normalizedRun.browserEnvironmentConfigId,
       normalizedRun.status,
       normalizedRun.mode,
       normalizedRun.summary,
@@ -2083,6 +2883,7 @@ export function createPlatformStore(projectRoot) {
       serializeJson(normalizedRun.latestStage),
       serializeJson(normalizedRun.insight),
       serializeJson(normalizedRun.conclusion),
+      serializeJson(normalizedRun.browserEnvironmentSummary),
       serializeJson(normalizedRun.artifactKeys),
       sqliteBoolean(normalizedRun.reportAvailable),
       normalizedRun.pid,
@@ -2350,8 +3151,8 @@ export function createPlatformStore(projectRoot) {
     databaseReadyPromise = (async () => {
       await ensureParentDirectory(paths.platformDatabasePath);
       database = new DatabaseSync(paths.platformDatabasePath);
-      database.exec(createSchemaSql());
       ensureSchemaMigrations(database);
+      seedBrowserEnvironmentConfigsIfNeeded(database);
 
       const counts = countCoreRecords(database);
       if (!counts.sites || !counts.profiles || !counts.mailConfigs || !counts.plans) {
@@ -2395,6 +3196,8 @@ export function createPlatformStore(projectRoot) {
       selectedPlanId: selectionRow.selected_plan_id || "",
       selectedProfileId: selectionRow.selected_profile_id || "",
       selectedMailConfigId: selectionRow.selected_mail_config_id || "",
+      selectedBrowserEnvironmentConfigId:
+        selectionRow.selected_browser_environment_config_id || "",
       sites: connection
         .prepare("SELECT * FROM sites ORDER BY datetime(created_at) ASC, id ASC")
         .all()
@@ -2407,6 +3210,12 @@ export function createPlatformStore(projectRoot) {
         .prepare("SELECT * FROM mail_configs ORDER BY datetime(created_at) ASC, id ASC")
         .all()
         .map(mapMailConfigRow),
+      browserEnvironmentConfigs: connection
+        .prepare(
+          "SELECT * FROM browser_environment_configs ORDER BY datetime(created_at) ASC, id ASC"
+        )
+        .all()
+        .map(mapBrowserEnvironmentConfigRow),
       plans: connection
         .prepare("SELECT * FROM plans ORDER BY datetime(created_at) ASC, id ASC")
         .all()
@@ -3123,6 +3932,87 @@ export function createPlatformStore(projectRoot) {
     return nextMailConfig;
   }
 
+  async function saveBrowserEnvironmentConfig(payload) {
+    const state = await readState();
+    const existingIndex = state.browserEnvironmentConfigs.findIndex(
+      (config) => config.id === payload.id
+    );
+    const nextConfig = normalizeBrowserEnvironmentConfig({
+      ...state.browserEnvironmentConfigs[existingIndex],
+      ...payload
+    });
+    assertSafeConfig(nextConfig, "browserEnvironment");
+
+    if (existingIndex >= 0) {
+      state.browserEnvironmentConfigs[existingIndex] = {
+        ...state.browserEnvironmentConfigs[existingIndex],
+        ...nextConfig,
+        createdAt: state.browserEnvironmentConfigs[existingIndex].createdAt,
+        updatedAt: nowIso()
+      };
+    } else {
+      state.browserEnvironmentConfigs.push(nextConfig);
+    }
+
+    state.selectedBrowserEnvironmentConfigId = nextConfig.id;
+    await persistState(state);
+    return nextConfig;
+  }
+
+  async function importLegacyBrowserEnvironmentConfig(payload) {
+    const normalized = normalizeLegacyFingerprintAsset(
+      payload?.payload ?? payload,
+      payload?.sourceLabel || payload?.fileName || "legacy-import"
+    );
+    return saveBrowserEnvironmentConfig(normalized);
+  }
+
+  async function deleteBrowserEnvironmentConfig(browserEnvironmentConfigId) {
+    const normalizedBrowserEnvironmentConfigId = String(
+      browserEnvironmentConfigId || ""
+    ).trim();
+    if (!normalizedBrowserEnvironmentConfigId) {
+      throw new Error("缺少要删除的浏览器环境配置 ID。");
+    }
+
+    const state = await readState();
+    const existingIndex = state.browserEnvironmentConfigs.findIndex(
+      (config) => config.id === normalizedBrowserEnvironmentConfigId
+    );
+
+    if (existingIndex < 0) {
+      throw new Error("找不到要删除的浏览器环境配置。");
+    }
+
+    const referencedPlans = state.plans.filter(
+      (plan) => plan.browserEnvironmentConfigId === normalizedBrowserEnvironmentConfigId
+    );
+    if (referencedPlans.length) {
+      const planNames = referencedPlans
+        .slice(0, 3)
+        .map((plan) => plan.name || plan.id)
+        .join("、");
+      const suffix = referencedPlans.length > 3 ? " 等方案" : "";
+      throw new Error(
+        `浏览器环境配置仍被 ${referencedPlans.length} 个方案引用，请先调整这些方案后再删除：${planNames}${suffix}`
+      );
+    }
+
+    if (state.browserEnvironmentConfigs.length <= 1) {
+      throw new Error("平台至少需要保留一个浏览器环境配置。");
+    }
+
+    const [deletedConfig] = state.browserEnvironmentConfigs.splice(existingIndex, 1);
+
+    if (state.selectedBrowserEnvironmentConfigId === normalizedBrowserEnvironmentConfigId) {
+      state.selectedBrowserEnvironmentConfigId =
+        state.browserEnvironmentConfigs[0]?.id || "";
+    }
+
+    await persistState(state);
+    return deletedConfig;
+  }
+
   async function savePlan(payload) {
     const state = await readState();
     const existingIndex = state.plans.findIndex((plan) => plan.id === payload.id);
@@ -3140,6 +4030,9 @@ export function createPlatformStore(projectRoot) {
     const mailConfigExists = state.mailConfigs.some(
       (mailConfig) => mailConfig.id === nextPlan.mailConfigId
     );
+    const browserEnvironmentExists = state.browserEnvironmentConfigs.some(
+      (config) => config.id === nextPlan.browserEnvironmentConfigId
+    );
 
     if (!siteExists) {
       throw new Error("测试方案关联的站点不存在。");
@@ -3151,6 +4044,10 @@ export function createPlatformStore(projectRoot) {
 
     if (nextPlan.mailConfigId && !mailConfigExists) {
       throw new Error("测试方案关联的邮箱配置不存在。");
+    }
+
+    if (!browserEnvironmentExists) {
+      throw new Error("测试方案关联的浏览器环境配置不存在。");
     }
 
     if (existingIndex >= 0) {
@@ -3168,6 +4065,7 @@ export function createPlatformStore(projectRoot) {
     state.selectedSiteId = nextPlan.siteId;
     state.selectedProfileId = nextPlan.profileId;
     state.selectedMailConfigId = nextPlan.mailConfigId;
+    state.selectedBrowserEnvironmentConfigId = nextPlan.browserEnvironmentConfigId;
     await persistState(state);
     return nextPlan;
   }
@@ -3196,6 +4094,9 @@ export function createPlatformStore(projectRoot) {
       state.selectedSiteId = state.plans[0]?.siteId || state.selectedSiteId;
       state.selectedProfileId = state.plans[0]?.profileId || state.selectedProfileId;
       state.selectedMailConfigId = state.plans[0]?.mailConfigId || state.selectedMailConfigId;
+      state.selectedBrowserEnvironmentConfigId =
+        state.plans[0]?.browserEnvironmentConfigId ||
+        state.selectedBrowserEnvironmentConfigId;
     }
 
     await persistState(state);
@@ -3373,6 +4274,9 @@ export function createPlatformStore(projectRoot) {
     const site = state.sites.find((record) => record.id === plan.siteId);
     const profile = state.profiles.find((record) => record.id === plan.profileId);
     const mailConfig = state.mailConfigs.find((record) => record.id === plan.mailConfigId);
+    const browserEnvironmentConfig = state.browserEnvironmentConfigs.find(
+      (record) => record.id === plan.browserEnvironmentConfigId
+    );
     const effectiveRunMode = requestedMode === "headed" ? "headed" : plan.runMode;
     const effectiveContinueAfterProtectedChallenge =
       plan.continueAfterProtectedChallenge || state.system.continueAfterProtectedChallenge;
@@ -3385,14 +4289,20 @@ export function createPlatformStore(projectRoot) {
       throw new Error("测试方案关联的画像不存在。");
     }
 
+    validateBrowserEnvironmentForExecution(browserEnvironmentConfig);
+    const browserEnvironmentSettings =
+      buildBrowserEnvironmentLaunchSettings(browserEnvironmentConfig);
+
     validateHttpsUrl(site.startUrl);
     assertSafeConfig(profile);
     assertSafeConfig(mailConfig ?? {});
+    assertSafeConfig(browserEnvironmentConfig ?? {});
 
     state.selectedPlanId = plan.id;
     state.selectedSiteId = site.id;
     state.selectedProfileId = profile.id;
     state.selectedMailConfigId = mailConfig?.id || "";
+    state.selectedBrowserEnvironmentConfigId = browserEnvironmentConfig?.id || "";
     state.system.defaultRunMode = effectiveRunMode;
     state.system.updatedAt = nowIso();
     state.system.continueAfterProtectedChallenge = effectiveContinueAfterProtectedChallenge;
@@ -3402,7 +4312,9 @@ export function createPlatformStore(projectRoot) {
       site,
       plan,
       profile,
-      mailConfig
+      mailConfig,
+      browserEnvironmentConfig,
+      browserEnvironmentSettings
     };
   }
 
@@ -3416,6 +4328,9 @@ export function createPlatformStore(projectRoot) {
     const readyMailConfigs = state.mailConfigs.filter(
       (mailConfig) => getMailReadiness(mailConfig).ready
     ).length;
+    const approvedBrowserEnvironments = state.browserEnvironmentConfigs.filter(
+      (config) => config.approvalStatus === "approved"
+    ).length;
     const reportCount = artifacts.filter((artifact) => artifact.type === "report").length;
     const tokenCount = artifacts.filter((artifact) => artifact.type === "token").length;
     const failedRuns = runHistory.filter((run) => run.status === "failed").length;
@@ -3426,9 +4341,11 @@ export function createPlatformStore(projectRoot) {
         planCount: state.plans.length,
         profileCount: state.profiles.length,
         mailConfigCount: state.mailConfigs.length,
+        browserEnvironmentConfigCount: state.browserEnvironmentConfigs.length,
         artifactCount: artifacts.length,
         readySites,
         readyMailConfigs,
+        approvedBrowserEnvironments,
         reportCount,
         tokenCount,
         failedRuns,
@@ -3458,6 +4375,14 @@ export function createPlatformStore(projectRoot) {
           detail: readyMailConfigs
             ? `${readyMailConfigs} 个邮箱配置已就绪`
             : "邮箱链路仍需配置"
+        },
+        {
+          id: "browser-environments",
+          label: "浏览器环境",
+          tone: approvedBrowserEnvironments ? "success" : "warning",
+          detail: approvedBrowserEnvironments
+            ? `${approvedBrowserEnvironments} 套浏览器环境已通过审批`
+            : "尚无可执行的浏览器环境配置"
         },
         {
           id: "runs",
@@ -3512,8 +4437,11 @@ export function createPlatformStore(projectRoot) {
     deletePlan,
     saveProfile,
     deleteProfile,
-    saveMailConfig,
-    deleteMailConfig,
+      saveMailConfig,
+      saveBrowserEnvironmentConfig,
+      importLegacyBrowserEnvironmentConfig,
+      deleteBrowserEnvironmentConfig,
+      deleteMailConfig,
     updateSystem,
     testMailConfigConnection,
     activatePlan,

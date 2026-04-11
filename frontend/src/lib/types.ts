@@ -19,8 +19,59 @@ export interface PlanResource {
   siteId: string;
   profileId: string;
   mailConfigId: string;
+  browserEnvironmentConfigId: string;
   runMode: RunMode;
   continueAfterProtectedChallenge: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BrowserEnvironmentConfig {
+  id?: string;
+  name: string;
+  description: string;
+  sourceType: "manual" | "local-export" | "approved-template" | "legacy-import";
+  sourceLabel: string;
+  approvalStatus: "approved" | "pending" | "rejected";
+  approvedBy: string;
+  approvedAt: string;
+  browserName: string;
+  browserVersion: string;
+  platform: string;
+  userAgent: string;
+  userAgentMetadata: {
+    brands: Array<{ brand: string; version: string }>;
+    mobile: boolean;
+    platform: string;
+    architecture: string;
+    bitness: string;
+    model: string;
+    platformVersion: string;
+    fullVersionList: Array<{ brand: string; version: string }>;
+  };
+  locale: string;
+  languages: string[];
+  timezone: string;
+  viewport: {
+    width: number;
+    height: number;
+    deviceScaleFactor: number;
+    isMobile: boolean;
+    hasTouch: boolean;
+  };
+  screen: {
+    width: number;
+    height: number;
+    availWidth: number;
+    availHeight: number;
+    colorDepth: number;
+    pixelDepth: number;
+  };
+  geolocation: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -79,10 +130,12 @@ export interface PlatformState {
   selectedPlanId: string;
   selectedProfileId: string;
   selectedMailConfigId: string;
+  selectedBrowserEnvironmentConfigId: string;
   sites: SiteResource[];
   plans: PlanResource[];
   profiles: ProfileResource[];
   mailConfigs: MailConfigResource[];
+  browserEnvironmentConfigs: BrowserEnvironmentConfig[];
   system: SystemSettings;
   updatedAt: string;
 }
@@ -143,6 +196,7 @@ export interface RunRecord {
   siteName: string;
   profileId: string;
   mailConfigId: string | null;
+  browserEnvironmentConfigId?: string | null;
   status: RunStatus;
   mode: RunMode;
   summary: string;
@@ -154,6 +208,23 @@ export interface RunRecord {
   latestStage: RunStageSnapshot | null;
   insight: RunInsight | null;
   conclusion: RunConclusion | null;
+  browserEnvironmentSummary: {
+    configId: string;
+    name: string;
+    browserName: string;
+    browserVersion: string;
+    sourceType: string;
+    sourceLabel: string;
+    approvalStatus: string;
+    approvedBy: string;
+    approvedAt: string;
+    locale: string;
+    timezone: string;
+    userAgent: string;
+    viewport: Record<string, unknown>;
+    screen: Record<string, unknown>;
+    geolocation: Record<string, unknown> | null;
+  } | null;
   artifactKeys: string[];
   reportAvailable: boolean;
   pid?: number | null;
@@ -231,9 +302,11 @@ export interface OverviewData {
     planCount: number;
     profileCount: number;
     mailConfigCount: number;
+    browserEnvironmentConfigCount: number;
     artifactCount: number;
     readySites: number;
     readyMailConfigs: number;
+    approvedBrowserEnvironments: number;
     reportCount: number;
     tokenCount: number;
     failedRuns: number;

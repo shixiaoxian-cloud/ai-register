@@ -462,6 +462,7 @@ export function createRunController({
       siteName: applied.site.name,
       profileId: applied.profile.id,
       mailConfigId: applied.mailConfig?.id || null,
+      browserEnvironmentConfigId: applied.browserEnvironmentConfig?.id || null,
       status: runState.status,
       mode,
       summary: runState.summary,
@@ -473,6 +474,7 @@ export function createRunController({
       latestStage: null,
       insight: null,
       conclusion: null,
+      browserEnvironmentSummary: applied.browserEnvironmentSettings?.summary || null,
       artifactKeys: [],
       reportAvailable: false
     };
@@ -483,6 +485,12 @@ export function createRunController({
     appendLog("system", `执行命令：${runState.command}`);
     appendLog("system", `站点：${applied.site.name}`);
     appendLog("system", `方案：${applied.plan.name}`);
+    if (applied.browserEnvironmentConfig) {
+      appendLog(
+        "system",
+        `浏览器环境：${applied.browserEnvironmentConfig.name} · ${applied.browserEnvironmentConfig.browserVersion} · ${applied.browserEnvironmentConfig.approvalStatus}`
+      );
+    }
     appendLog(
       "system",
       runCount > 1
@@ -496,7 +504,8 @@ export function createRunController({
       PLATFORM_TASK_ID: taskId,
       PLATFORM_RUN_ID: runState.platformRunId,
       PLATFORM_RUN_COUNT: String(runCount),
-      TOKEN_OUTPUT_DIR: path.join(projectRoot, "output_tokens", taskId)
+      TOKEN_OUTPUT_DIR: path.join(projectRoot, "output_tokens", taskId),
+      ...(applied.browserEnvironmentSettings?.env || {})
     };
 
     currentChild = spawn(command, args, {

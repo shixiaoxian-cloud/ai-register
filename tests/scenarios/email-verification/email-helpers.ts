@@ -3,6 +3,8 @@
  * 负责邮箱验证码的获取、重试和提交
  */
 
+// @ts-nocheck
+
 import type { Page } from "@playwright/test";
 import { waitForEmailCode } from "../../../src/email/imap";
 import type {

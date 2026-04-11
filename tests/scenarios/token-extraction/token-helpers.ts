@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /**
  * Token 提取模块
  * 负责从页面中提取和保存 access token

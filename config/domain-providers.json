@@ -1,0 +1,63 @@
+{
+  "providers": {
+    "duckdns": {
+      "type": "subdomain",
+      "name": "DuckDNS",
+      "apiEndpoint": "https://www.duckdns.org/update",
+      "authType": "token",
+      "free": true,
+      "domains": ["duckdns.org"],
+      "features": {
+        "ipv4": true,
+        "ipv6": true,
+        "wildcard": true,
+        "autoRenew": true
+      },
+      "limits": {
+        "maxSubdomains": 5,
+        "updateInterval": 300
+      },
+      "documentation": "https://duckdns.org/spec.jsp"
+    },
+    "noip": {
+      "type": "subdomain",
+      "name": "No-IP",
+      "apiEndpoint": "https://api.noip.com/v1",
+      "authType": "bearer",
+      "free": true,
+      "domains": ["ddns.net", "hopto.org", "zapto.org"],
+      "features": {
+        "ipv4": true,
+        "ipv6": false,
+        "wildcard": false,
+        "autoRenew": false
+      },
+      "limits": {
+        "maxSubdomains": 3,
+        "updateInterval": 300,
+        "confirmInterval": 2592000
+      },
+      "documentation": "https://blog.noip.com/no-ips-powerful-dns-provider-api"
+    },
+    "freedns": {
+      "type": "subdomain",
+      "name": "FreeDNS",
+      "apiEndpoint": "https://freedns.afraid.org/api",
+      "authType": "apikey",
+      "free": true,
+      "domains": ["multiple"],
+      "features": {
+        "ipv4": true,
+        "ipv6": true,
+        "wildcard": false,
+        "autoRenew": true
+      },
+      "limits": {
+        "maxSubdomains": 50,
+        "updateInterval": 300
+      },
+      "documentation": "https://freedns.afraid.org/"
+    }
+  },
+  "defaultProvider": "duckdns"
+}

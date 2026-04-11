@@ -76,8 +76,8 @@
 - [Sub2Api 文件聚合完成](implementation/sub2api-aggregation-complete.md)
 
 ### 技术分析
-- [反检测策略](analysis/anti-detection.md)
-- [反检测策略（英文）](analysis/anti-detection-en.md)
+- [历史策略研究](analysis/anti-detection.md)
+- [历史策略研究（英文）](analysis/anti-detection-en.md)
 - [高级隐身技术](analysis/advanced-stealth.md)
 - [遥测分析](analysis/telemetry.md)
 - [专家分析报告](analysis/expert-report.md)

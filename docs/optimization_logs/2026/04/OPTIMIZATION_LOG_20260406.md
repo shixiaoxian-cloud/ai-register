@@ -252,3 +252,126 @@
 ### 后续动作
 
 - 若后续拿到该日期弹层的完整 DOM，可继续把当前基于按钮顺序的月/日/年定位收敛到更强的标签语义定位。
+
+## 浏览器环境配置合规化实现补记
+
+### 本轮变更
+
+- 在 `scripts/platform-store.mjs` 中新增 `BrowserEnvironmentConfig` 资源模型、SQLite schema、`Plan.browserEnvironmentConfigId` 绑定字段、运行记录环境回显字段、默认环境自举逻辑，以及历史 `fingerprint` 资产的白名单迁移与禁止字段阻断逻辑。
+- 在 `scripts/config-server.mjs` 中新增 `/api/platform/browser-environments` CRUD 与 `/api/platform/browser-environments/import-legacy` 迁移接口。
+- 在 `src/config/platform-sqlite.ts`、`src/env.ts`、`playwright.config.ts`、`src/stealth/advanced-stealth.ts`、`src/stealth/top-tier-bypass.ts` 中把浏览器环境配置接入当前活动方案、运行前 Fail Fast 校验、Playwright 启动参数和合法白名单应用链路。
+- 在 `frontend/src/lib/types.ts`、`frontend/src/lib/api.ts`、`frontend/src/pages/ConfigCenterPage.tsx`、`frontend/src/pages/OverviewPage.tsx`、`frontend/src/pages/RunsPage.tsx`、`frontend/src/pages/ArtifactsPage.tsx` 中新增浏览器环境配置资源管理、方案绑定、审批状态展示、运行详情回显和产物侧回显。
+- 新增 `tests/integration/browser-environment-store.test.mjs`，覆盖默认环境自举、禁止字段阻断和引用删除阻断。
+- 在 `tests/common/outcome-recorder.ts` 中追加 `browser-environment-summary.json` 与 `acceptance-summary.json` 输出，让验收链路以授权站点结果、配置回显和审计记录为主。
+- 已完成导出工具语义改写与白名单导出结构收口，`tools/fingerprint-exporter.html` / `tools/fingerprint-collector.js` 现已只导出合规字段与来源元数据。
+- 已回写 `openspec/changes/rename-browser-environment-diagnostic-config/tasks.md`，当前仅剩 `1.1 文档真值与命名治理` 未收口。
+
+### 已核对文件
+
+- `scripts/platform-store.mjs`
+- `scripts/config-server.mjs`
+- `scripts/platform-runner.mjs`
+- `src/config/platform-sqlite.ts`
+- `src/env.ts`
+- `src/stealth/advanced-stealth.ts`
+- `src/stealth/top-tier-bypass.ts`
+- `playwright.config.ts`
+- `frontend/src/lib/types.ts`
+- `frontend/src/lib/api.ts`
+- `frontend/src/pages/ConfigCenterPage.tsx`
+- `frontend/src/pages/OverviewPage.tsx`
+- `frontend/src/pages/RunsPage.tsx`
+- `frontend/src/pages/ArtifactsPage.tsx`
+- `tests/common/outcome-recorder.ts`
+- `tests/integration/browser-environment-store.test.mjs`
+- `tools/fingerprint-exporter.html`
+- `tools/fingerprint-collector.js`
+- `openspec/changes/rename-browser-environment-diagnostic-config/tasks.md`
+
+### 已执行测试
+
+- `node --check tools/fingerprint-collector.js`：通过。
+- `node --check scripts/platform-store.mjs`：通过。
+- `node --check scripts/config-server.mjs`：通过。
+- `node --check scripts/platform-runner.mjs`：通过。
+- `npm run typecheck`：通过。
+- `npm run console:typecheck`：通过。
+- `npm run console:build`：通过。
+- `node --test tests/integration/browser-environment-store.test.mjs`：通过，3 个测试全部通过。
+- 临时 store smoke test：在临时目录中调用 `createPlatformStore()` 成功自举默认浏览器环境配置，并能阻断包含 `canvas` 禁止字段的历史迁移输入。
+- 仓库级审计：`rg -n -S "stealthMode|noise|plugin spoof|navigator" src` 已执行，用于确认旧 stealth 逻辑仍在仓库中但已与主链路隔离。
+
+### 未执行测试
+
+- `npm test` / `npm run test:headed`：本轮未对真实授权站点执行完整 Playwright 回归，原因是该验证依赖外部授权目标站点、邮箱链路和人工接续流程，不适合在当前实现回合自动重放。
+- 浏览器环境配置的端到端人工验收：尚未在真实授权站点上逐条核对“配置回显 + 人工接续 + 最终结果”三者一致性。
+
+### 一致性检查
+
+- 已完成一次跨后端 schema、运行时配置链路、前端资源页、运行回显和测试产物的实现一致性检查。
+- `openspec/changes/rename-browser-environment-diagnostic-config/tasks.md` 当前为 `13/14` 完成，唯一保留项为 `1.1` 文档总治理。
+- 仓库级术语审计 `rg -n -S "反检测|伪装设备指纹|降低检测率|规避机器人检测|绕过保护|stealthMode" README.md FINGERPRINT_README.md docs openspec` 仍命中大量历史分析/实施文档与迁移说明；这些内容不再是实现主链路真值，但文档总治理尚未完成。
+
+### 阻塞原因
+
+- 历史文档债较重，`docs/analysis/`、`docs/implementation/`、`docs/guides/` 中仍保留大量旧“反检测 / 指纹配置 / 检测站评分”语义，导致 `1.1` 暂未完成。
+- 旧 `src/stealth/anti-detection.ts`、`src/stealth/super-stealth.ts` 等文件仍存在历史代码，虽然已退出当前主链路，但后续若要做彻底清理仍需单独 change 或继续沿本 change 收口。
+
+### 后续动作
+
+- 继续执行 `1.1`：系统清理 `README.md`、`FINGERPRINT_README.md`、`docs/implementation/fingerprint-config-*.md`、`docs/guides/fingerprint-config-*.md` 及相关历史分析文档中的旧语义，把允许保留的内容收敛为迁移背景。
+- 在授权站点上执行一次完整人工验收，核对浏览器环境配置绑定、审批状态、运行详情回显、`browser-environment-summary.json` 和 `acceptance-summary.json` 是否一致。
+- 若后续要彻底清空旧 stealth 文件，可再补一次代码审计，决定是物理删除旧文件还是把它们统一迁入历史归档目录。
+
+### 文档治理补记
+
+- 已将 `README.md`、`FINGERPRINT_README.md`、`docs/guides/fingerprint-config-*.md`、`docs/implementation/fingerprint-config-*.md` 收敛为浏览器环境配置主叙述或迁移兼容页，不再把旧术语当作实现真值。
+- `rg -n -S --glob "docs/guides/fingerprint-config-*.md" --glob "docs/implementation/fingerprint-config-*.md" --glob "README.md" --glob "FINGERPRINT_README.md" "反检测|伪装设备指纹|降低检测率|规避机器人检测|绕过保护|stealthMode|bot\\.sannysoft|pixelscan|检测站评分|指纹配置" .`：无命中。
+- 当前剩余命中主要位于 scope 外的历史研究/排障资料，以及 OpenSpec 中用于描述“禁止项”的规范文本；这些内容不再阻塞本 change 的主真值文档收口。
+
+## 浏览器环境新建预填修复补记
+
+### 本轮变更
+
+- 修复 `frontend/src/pages/ConfigCenterPage.tsx` 中“新建浏览器环境”默认草稿为空导致保存时报错的问题。
+- 新建浏览器环境时，前端现在会优先基于当前已选浏览器环境配置生成新草稿；若当前无选中项，则回退到系统默认浏览器环境模板，确保 `browserVersion` 与 `userAgent` 等后端必填字段预填齐全。
+- 补充新建态草稿保护：当面板处于新建编辑模式且没有选中现有记录时，不再被 `useEffect` 立即重置回默认查看态草稿。
+
+### 已核对文件
+
+- `frontend/src/pages/ConfigCenterPage.tsx`
+- `docs/optimization_logs/2026/04/OPTIMIZATION_LOG_20260406.md`
+
+### 已执行测试
+
+- `npm run typecheck`：通过。
+- `npm run console:typecheck`：通过。
+- `npm run console:build`：通过。
+
+### 未执行测试
+
+- 浏览器环境配置新建页的人工点击回归：本轮未直接打开浏览器手工点选页面，当前以类型检查、构建通过和代码链路复核作为替代验证。
+
+### 阻塞原因
+
+- 无。
+
+### 后续动作
+
+- 如需进一步防止类似问题，可把配置中心各资源的新建草稿统一收敛到“从已选记录派生模板”的共享 helper，减少前端空草稿与后端必填校验错位的风险。
+
+## 浏览器环境新建隔离式 UI 验收补记
+
+### 本轮变更
+
+- 在临时目录下启动隔离式平台 store 与一次性本地验收服务，避免污染仓库当前 `config/` 状态文件。
+- 使用 Playwright 真实打开 `/config` 页面，切换到“浏览器环境”tab，点击“新建浏览器环境”，填写名称与来源标记后执行保存。
+- 验证保存成功提示、详情标题、列表新增记录以及 `/api/platform/state` 中的新增记录回显。
+
+### 已执行测试
+
+- 隔离式 UI 验收：通过。新建页默认已预填 `browserVersion=131.0.0.0` 与非空 `User Agent`，保存后成功生成一条新浏览器环境记录，API state 中总数从 1 增长到 2。
+
+### 未执行测试
+
+- 无新增未执行项；本轮验收已覆盖“进入配置中心 -> 新建浏览器环境 -> 保存成功 -> 列表与详情回显 -> API state 回显”主链路。

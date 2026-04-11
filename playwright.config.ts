@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 
 import { defineConfig } from "@playwright/test";
 import dotenv from "dotenv";
+import {
+  readActivePlatformContext,
+  type PlatformBrowserEnvironmentConfig
+} from "./src/config/platform-sqlite";
 
 dotenv.config({ quiet: true });
 
@@ -44,6 +48,53 @@ function resolveLocalBrowserPath(): string | undefined {
 }
 
 const localBrowserPath = resolveLocalBrowserPath();
+let activeBrowserEnvironmentConfig: PlatformBrowserEnvironmentConfig | null = null;
+
+try {
+  activeBrowserEnvironmentConfig =
+    readActivePlatformContext().browserEnvironmentConfig;
+} catch {
+  activeBrowserEnvironmentConfig = null;
+}
+
+function buildDefaultHeaders() {
+  const userAgentMetadata =
+    activeBrowserEnvironmentConfig?.userAgentMetadata || {};
+  const brands = Array.isArray(userAgentMetadata.brands)
+    ? userAgentMetadata.brands
+    : [];
+  const secChUa = brands
+    .map(
+      (item: { brand: string; version: string }) =>
+        `"${item.brand}";v="${item.version}"`
+    )
+    .join(", ");
+
+  return {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language":
+      activeBrowserEnvironmentConfig?.locale || "en-US,en;q=0.9",
+    "Sec-Ch-Ua":
+      secChUa || '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    "Sec-Ch-Ua-Mobile": userAgentMetadata.mobile ? "?1" : "?0",
+    "Sec-Ch-Ua-Platform": userAgentMetadata.platform
+      ? `"${userAgentMetadata.platform}"`
+      : '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1"
+  };
+}
+
+const viewportWidth = Number(
+  activeBrowserEnvironmentConfig?.viewport?.width || 1440
+);
+const viewportHeight = Number(
+  activeBrowserEnvironmentConfig?.viewport?.height || 900
+);
 
 export default defineConfig({
   testDir: "./tests",
@@ -58,29 +109,29 @@ export default defineConfig({
   use: {
     browserName: "chromium",
     headless: !headed,
-    locale: process.env.BROWSER_LOCALE ?? "en-US",
-    timezoneId: process.env.BROWSER_TIMEZONE ?? "America/Los_Angeles",
+    locale:
+      process.env.BROWSER_LOCALE ??
+      activeBrowserEnvironmentConfig?.locale ??
+      "en-US",
+    timezoneId:
+      process.env.BROWSER_TIMEZONE ??
+      activeBrowserEnvironmentConfig?.timezone ??
+      "America/Los_Angeles",
     ignoreHTTPSErrors: true,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    viewport: { width: 1440, height: 900 },
-    extraHTTPHeaders: {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "Accept-Encoding": "gzip, deflate, br, zstd",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
-      "Sec-Ch-Ua-Mobile": "?0",
-      "Sec-Ch-Ua-Platform": '"Windows"',
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Upgrade-Insecure-Requests": "1"
+    viewport: {
+      width: viewportWidth,
+      height: viewportHeight
     },
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    extraHTTPHeaders: buildDefaultHeaders(),
+    userAgent:
+      process.env.BROWSER_USER_AGENT ??
+      activeBrowserEnvironmentConfig?.userAgent ??
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     launchOptions: {
       executablePath: localBrowserPath,
       args: [

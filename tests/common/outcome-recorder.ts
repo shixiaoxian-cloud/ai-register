@@ -3,6 +3,7 @@
  */
 
 import type { Page, TestInfo } from "@playwright/test";
+import { browserEnvironmentContext } from "../../src/env";
 import type { FlowStage, OutcomeKind, OutcomeRecord } from "./types";
 
 /**
@@ -55,6 +56,46 @@ export async function attachSummary(
 ): Promise<void> {
   await testInfo.attach("journey-summary.json", {
     body: Buffer.from(JSON.stringify(records, null, 2), "utf8"),
+    contentType: "application/json"
+  });
+
+  await testInfo.attach("browser-environment-summary.json", {
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          summary: browserEnvironmentContext.summary,
+          error: browserEnvironmentContext.error,
+          config: browserEnvironmentContext.config
+        },
+        null,
+        2
+      ),
+      "utf8"
+    ),
+    contentType: "application/json"
+  });
+
+  await testInfo.attach("acceptance-summary.json", {
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          finalOutcome: records.at(-1)?.kind || "unknown",
+          finalStage: records.at(-1)?.stage || "unknown",
+          browserEnvironment: {
+            summary: browserEnvironmentContext.summary,
+            error: browserEnvironmentContext.error,
+            configId: browserEnvironmentContext.config?.id || null,
+            configName: browserEnvironmentContext.config?.name || null,
+            approvalStatus:
+              browserEnvironmentContext.config?.approvalStatus || null
+          },
+          records
+        },
+        null,
+        2
+      ),
+      "utf8"
+    ),
     contentType: "application/json"
   });
 }

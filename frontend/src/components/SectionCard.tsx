@@ -5,11 +5,20 @@ interface SectionCardProps {
   subtitle?: string;
   actions?: ReactNode;
   children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
 }
 
-export function SectionCard({ title, subtitle, actions, children }: SectionCardProps) {
+export function SectionCard({
+  title,
+  subtitle,
+  actions,
+  children,
+  className,
+  bodyClassName
+}: SectionCardProps) {
   return (
-    <section className="section-card">
+    <section className={["section-card", className].filter(Boolean).join(" ")}>
       <header className="section-card__header">
         <div>
           <h2>{title}</h2>
@@ -17,7 +26,9 @@ export function SectionCard({ title, subtitle, actions, children }: SectionCardP
         </div>
         {actions ? <div className="section-card__actions">{actions}</div> : null}
       </header>
-      <div className="section-card__body">{children}</div>
+      <div className={["section-card__body", bodyClassName].filter(Boolean).join(" ")}>
+        {children}
+      </div>
     </section>
   );
 }

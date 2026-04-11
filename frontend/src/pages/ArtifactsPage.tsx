@@ -346,6 +346,18 @@ export function ArtifactsPage() {
                   {selectedCase ? ` · 批次：${selectedCase.name}` : ""}
                 </div>
               </div>
+
+              {selectedRun?.browserEnvironmentSummary ? (
+                <article className="insight-panel tone-neutral">
+                  <span>浏览器环境回显</span>
+                  <strong>
+                    {selectedRun.browserEnvironmentSummary.name} · {selectedRun.browserEnvironmentSummary.browserVersion}
+                  </strong>
+                  <p>
+                    {selectedRun.browserEnvironmentSummary.sourceType} / {selectedRun.browserEnvironmentSummary.approvalStatus}
+                  </p>
+                </article>
+              ) : null}
             </>
           ) : (
             <p className="empty-copy">选择一个产物后，这里会显示它的归属和操作入口。</p>

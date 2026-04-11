@@ -116,7 +116,7 @@ export function SystemPage() {
       {message ? <div className="banner banner-danger">{message}</div> : null}
       {success ? <div className="banner banner-success">{success}</div> : null}
 
-      <div className="detail-layout">
+      <div className="detail-layout detail-layout--wide">
         <SectionCard title="设置项台账" subtitle="每个设置项都能在列表中查看和切换到修改模式。">
           <div className="table-wrap">
             <table className="data-table">

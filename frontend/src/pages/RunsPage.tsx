@@ -94,6 +94,8 @@ export function RunsPage() {
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) || runs[0] || null;
   const activeRun = runs.find((run) => run.status === "running" || run.status === "stopping") || null;
+  const selectedPlan =
+    platformState?.plans.find((plan) => plan.id === selectedPlanId) || null;
   const visibleLogs =
     selectedRun?.logs.filter((entry) =>
       entry.text.toLowerCase().includes(deferredLogSearch.toLowerCase())
@@ -199,9 +201,26 @@ export function RunsPage() {
             />
           </label>
         </div>
+        <div className="control-summary-grid">
+          <div>
+            <span>当前活动</span>
+            <strong>{activeRun ? "运行中" : "当前空闲"}</strong>
+            <p>{activeRun ? `${activeRun.planName} · ${activeRun.siteName}` : "发起一次运行后，这里会持续展示最新执行上下文。"}</p>
+          </div>
+          <div>
+            <span>已选方案</span>
+            <strong>{selectedPlan?.name || "未选择方案"}</strong>
+            <p>{selectedPlan?.description || "当前会沿用所选方案的站点、画像和邮箱组合。"}</p>
+          </div>
+          <div>
+            <span>执行方式</span>
+            <strong>{mode === "headed" ? "有头模式" : "无头模式"}</strong>
+            <p>{`计划连续执行 ${runCount} 次。`}</p>
+          </div>
+        </div>
       </SectionCard>
 
-      <div className="detail-layout">
+      <div className="detail-layout detail-layout--wide">
         <SectionCard title="运行台账" subtitle="左侧列表按时间倒序排列，点击即可查看右侧详情。">
           <div className="table-wrap">
             <table className="data-table">
@@ -302,6 +321,15 @@ export function RunsPage() {
                   <strong>{selectedRun.latestStage?.stageLabel || "尚无阶段信息"}</strong>
                   <p>{selectedRun.latestStage?.details || "等待后续阶段输出。"}</p>
                 </div>
+                <div>
+                  <span>浏览器环境</span>
+                  <strong>
+                    {selectedRun.browserEnvironmentSummary?.name || "未记录"}
+                  </strong>
+                  <p>
+                    {selectedRun.browserEnvironmentSummary?.approvalStatus || "未回显审批状态"}
+                  </p>
+                </div>
               </div>
 
               <div className="table-wrap">
@@ -333,6 +361,22 @@ export function RunsPage() {
                       <td>关联任务</td>
                       <td>{selectedRun.taskId || "无"}</td>
                     </tr>
+                    <tr>
+                      <td>浏览器环境</td>
+                      <td>
+                        {selectedRun.browserEnvironmentSummary
+                          ? `${selectedRun.browserEnvironmentSummary.name} / ${selectedRun.browserEnvironmentSummary.browserVersion}`
+                          : "无"}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>环境来源 / 审批</td>
+                      <td>
+                        {selectedRun.browserEnvironmentSummary
+                          ? `${selectedRun.browserEnvironmentSummary.sourceType} / ${selectedRun.browserEnvironmentSummary.approvalStatus}`
+                          : "无"}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -351,6 +395,18 @@ export function RunsPage() {
                   <strong>需要人工关注</strong>
                   <p>{selectedRun.insight.message}</p>
                   <p>{selectedRun.insight.action}</p>
+                </article>
+              ) : null}
+
+              {selectedRun.browserEnvironmentSummary ? (
+                <article className="insight-panel tone-neutral">
+                  <span>浏览器环境回显</span>
+                  <strong>
+                    {selectedRun.browserEnvironmentSummary.name} · {selectedRun.browserEnvironmentSummary.browserVersion}
+                  </strong>
+                  <p>
+                    {selectedRun.browserEnvironmentSummary.locale} / {selectedRun.browserEnvironmentSummary.timezone}
+                  </p>
                 </article>
               ) : null}
 

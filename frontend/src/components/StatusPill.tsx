@@ -8,5 +8,5 @@ interface StatusPillProps {
 }
 
 export function StatusPill({ tone = "neutral", children }: StatusPillProps) {
-  return <span className={`status-pill tone-${tone}`}>{children}</span>;
+  return <span className={`status-pill tone-${tone}`} role="status">{children}</span>;
 }

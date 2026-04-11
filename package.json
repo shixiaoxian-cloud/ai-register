@@ -21,7 +21,12 @@
     "debug:tempmail": "node scripts/debug-tempmail.js",
     "debug:api": "bash scripts/verify-tempmail-api.sh",
     "debug:test": "playwright test tests/debug-tempmail.spec.ts",
-    "aggregate": "node scripts/aggregate-sub2api.mjs"
+    "aggregate": "node scripts/aggregate-sub2api.mjs",
+    "domain:register": "node scripts/duckdns-register.mjs register",
+    "domain:update": "node scripts/duckdns-register.mjs update",
+    "domain:verify": "node scripts/duckdns-register.mjs verify",
+    "domain:clear": "node scripts/duckdns-register.mjs clear",
+    "domain:info": "node scripts/duckdns-register.mjs info"
   },
   "dependencies": {
     "react": "^18.3.1",

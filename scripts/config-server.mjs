@@ -194,6 +194,62 @@ async function handlePlatformApi(request, response, requestUrl) {
       }
     }
 
+    if (resource === "browser-environments") {
+      if (request.method === "GET" && resourceId && resourceId !== "import-legacy") {
+        const state = await store.readState();
+        const browserEnvironmentConfig = state.browserEnvironmentConfigs.find(
+          (record) => record.id === resourceId
+        );
+
+        if (!browserEnvironmentConfig) {
+          jsonResponse(response, 404, {
+            ok: false,
+            message: "浏览器环境配置不存在。"
+          });
+          return true;
+        }
+
+        jsonResponse(response, 200, { ok: true, browserEnvironmentConfig });
+        return true;
+      }
+
+      if (request.method === "GET") {
+        const state = await store.readState();
+        jsonResponse(response, 200, {
+          ok: true,
+          browserEnvironmentConfigs: state.browserEnvironmentConfigs
+        });
+        return true;
+      }
+
+      if (request.method === "POST" && resourceId === "import-legacy") {
+        const bodyText = await readBody(request);
+        const payload = JSON.parse(bodyText || "{}");
+        const browserEnvironmentConfig =
+          await store.importLegacyBrowserEnvironmentConfig(payload);
+        jsonResponse(response, 200, { ok: true, browserEnvironmentConfig });
+        return true;
+      }
+
+      if (request.method === "DELETE" && resourceId) {
+        const browserEnvironmentConfig =
+          await store.deleteBrowserEnvironmentConfig(resourceId);
+        jsonResponse(response, 200, { ok: true, browserEnvironmentConfig });
+        return true;
+      }
+
+      if (request.method === "POST" || request.method === "PUT") {
+        const bodyText = await readBody(request);
+        const payload = JSON.parse(bodyText || "{}");
+        const browserEnvironmentConfig = await store.saveBrowserEnvironmentConfig({
+          ...payload,
+          id: request.method === "PUT" ? resourceId : payload.id
+        });
+        jsonResponse(response, 200, { ok: true, browserEnvironmentConfig });
+        return true;
+      }
+    }
+
     if (resource === "plans") {
       if (request.method === "GET" && resourceId) {
         const state = await store.readState();

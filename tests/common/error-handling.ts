@@ -26,7 +26,9 @@ export async function detectRegistrationFailure(page: Page): Promise<string | nu
 
   const isErrorPage =
     /oops,\s*an error occurred/i.test(combined) ||
-    /operation timed out/i.test(combined);
+    /operation timed out/i.test(combined) ||
+    /failed to create account/i.test(combined) ||
+    /please try again/i.test(combined);
 
   if (!isErrorPage) {
     return null;
@@ -34,6 +36,10 @@ export async function detectRegistrationFailure(page: Page): Promise<string | nu
 
   if (/operation timed out/i.test(combined)) {
     return "注册流程进入错误页：Operation timed out。视为本次注册失败，将使用新资源重试。";
+  }
+
+  if (/failed to create account/i.test(combined)) {
+    return "注册流程进入错误页：Failed to create account. Please try again. 视为本次注册失败，将使用新资源重试。";
   }
 
   return "注册流程进入通用错误页。视为本次注册失败，将使用新资源重试。";

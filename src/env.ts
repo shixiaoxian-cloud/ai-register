@@ -1,5 +1,14 @@
-import { readActivePlatformContext } from "./config/platform-sqlite";
+import {
+  readActivePlatformContext,
+  type PlatformBrowserEnvironmentConfig
+} from "./config/platform-sqlite";
 import type { EmailVerificationConfig } from "./types";
+
+interface BrowserEnvironmentContext {
+  config: PlatformBrowserEnvironmentConfig | null;
+  summary: string;
+  error: string | null;
+}
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value === "") {
@@ -34,8 +43,77 @@ function resolveEmailCodeRegex(pattern: string | RegExp | undefined): RegExp {
   return /\b(\d{6})\b/;
 }
 
-const activePlatformContext = readActivePlatformContext();
-const activeMailConfig = activePlatformContext.mailConfig;
+function summarizeBrowserEnvironment(
+  config: PlatformBrowserEnvironmentConfig | null
+): string {
+  if (!config) {
+    return "未绑定浏览器环境配置";
+  }
+
+  const viewportWidth = Number(config.viewport?.width || 0);
+  const viewportHeight = Number(config.viewport?.height || 0);
+  const viewport = viewportWidth && viewportHeight
+    ? `${viewportWidth}x${viewportHeight}`
+    : "n/a";
+  const geolocation = config.geolocation
+    ? `${Number(config.geolocation.latitude || 0).toFixed(4)},${Number(
+        config.geolocation.longitude || 0
+      ).toFixed(4)}`
+    : "n/a";
+
+  return [
+    config.name,
+    config.browserVersion,
+    config.locale,
+    config.timezone,
+    viewport,
+    geolocation
+  ].join(" | ");
+}
+
+function validateBrowserEnvironment(
+  config: PlatformBrowserEnvironmentConfig | null
+): BrowserEnvironmentContext {
+  if (!config) {
+    return {
+      config: null,
+      summary: "未绑定浏览器环境配置",
+      error: "当前活动方案未绑定浏览器环境配置。"
+    };
+  }
+
+  if (config.approvalStatus !== "approved") {
+    return {
+      config: null,
+      summary: `${config.name} 未通过审批`,
+      error: `浏览器环境配置“${config.name}”尚未通过审批，不能执行测试。`
+    };
+  }
+
+  if (!config.userAgent || !config.browserVersion || !config.locale || !config.timezone) {
+    return {
+      config: null,
+      summary: `${config.name} 缺少关键字段`,
+      error: `浏览器环境配置“${config.name}”缺少关键字段，无法执行测试。`
+    };
+  }
+
+  const viewportWidth = Number(config.viewport?.width || 0);
+  const viewportHeight = Number(config.viewport?.height || 0);
+  if (!viewportWidth || !viewportHeight) {
+    return {
+      config: null,
+      summary: `${config.name} viewport 无效`,
+      error: `浏览器环境配置“${config.name}”缺少有效的 viewport。`
+    };
+  }
+
+  return {
+    config,
+    summary: summarizeBrowserEnvironment(config),
+    error: null
+  };
+}
 
 export function requireEnv(name: string): string {
   const value = process.env[name];
@@ -44,6 +122,20 @@ export function requireEnv(name: string): string {
   }
 
   return value;
+}
+
+const activePlatformContext = readActivePlatformContext();
+const activeMailConfig = activePlatformContext.mailConfig;
+export const browserEnvironmentContext = validateBrowserEnvironment(
+  activePlatformContext.browserEnvironmentConfig
+);
+
+export function requireBrowserEnvironment(): PlatformBrowserEnvironmentConfig {
+  if (!browserEnvironmentContext.config || browserEnvironmentContext.error) {
+    throw new Error(browserEnvironmentContext.error || "浏览器环境配置不可用。");
+  }
+
+  return browserEnvironmentContext.config;
 }
 
 export function hasImapConfig(): boolean {
@@ -79,7 +171,6 @@ export const runtimeConfig = {
   ),
   emailPollIntervalMs: parseNumber(process.env.EMAIL_POLL_INTERVAL_MS, 5_000),
   emailTimeoutMs: parseNumber(process.env.EMAIL_TIMEOUT_MS, 3 * 60 * 1000),
-  stealthMode: parseBoolean(process.env.STEALTH_MODE, true),
   telemetryMode: (process.env.TELEMETRY_MODE ?? "block") as
     | "block"
     | "modify"
@@ -87,7 +178,10 @@ export const runtimeConfig = {
     | "allow",
   useTempMail: Boolean(
     activeMailConfig?.enabled && activeMailConfig.mode === "temp-mail"
-  )
+  ),
+  browserEnvironmentSummary: browserEnvironmentContext.summary,
+  browserEnvironmentApproved: Boolean(browserEnvironmentContext.config),
+  browserEnvironmentError: browserEnvironmentContext.error
 };
 
 export const imapConfig = {

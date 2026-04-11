@@ -1,0 +1,250 @@
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.dialog-overlay--drawer {
+  justify-content: flex-end;
+  padding: 12px;
+}
+
+.dialog-surface {
+  width: min(100%, 560px);
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24);
+  animation: dialog-fade-in 220ms ease-out;
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 18px;
+  padding: 26px;
+}
+
+.confirm-dialog__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.confirm-dialog__icon--danger {
+  color: var(--danger);
+  background: rgba(197, 61, 85, 0.12);
+}
+
+.confirm-dialog__icon--accent {
+  color: var(--accent-strong);
+  background: rgba(20, 99, 194, 0.12);
+}
+
+.confirm-dialog__copy {
+  display: grid;
+  gap: 10px;
+}
+
+.confirm-dialog__copy h3,
+.drawer-panel__copy h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.confirm-dialog__copy p,
+.drawer-panel__copy p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.75;
+}
+
+.dialog-footer,
+.drawer-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.drawer-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 520px);
+  height: min(96vh, 880px);
+  max-height: 96vh;
+  border-radius: 28px;
+  animation: drawer-slide-in 240ms ease-out;
+}
+
+.drawer-panel--lg {
+  width: min(100%, 680px);
+}
+
+.drawer-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.drawer-panel__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.drawer-panel__body {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px 24px;
+}
+
+.drawer-panel__footer {
+  padding: 0 24px 24px;
+}
+
+.dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(246, 249, 252, 0.92);
+  color: var(--text-soft);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  color: var(--text);
+  border-color: rgba(20, 99, 194, 0.18);
+}
+
+.quick-create-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.quick-create-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 249, 252, 0.98));
+  text-align: left;
+  color: var(--text);
+}
+
+.quick-create-card:hover {
+  border-color: rgba(20, 99, 194, 0.18);
+  box-shadow: 0 18px 36px rgba(20, 99, 194, 0.08);
+}
+
+.quick-create-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quick-create-card__header strong {
+  font-size: 16px;
+}
+
+.quick-create-card p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.control-summary-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.control-summary-grid > div {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 252, 0.98));
+}
+
+.control-summary-grid span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.control-summary-grid strong {
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.control-summary-grid p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes drawer-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .dialog-overlay {
+    padding: 12px;
+  }
+
+  .drawer-panel,
+  .drawer-panel--lg {
+    width: 100%;
+    height: min(92vh, 880px);
+    border-radius: 24px;
+  }
+}
